@@ -1,7 +1,37 @@
-import { prisma, type PaymentProvider, type Prisma } from '@rustskinpay/db';
-import { createCheckoutSession } from './stripe.js';
+// Order/payment orchestrator. Provider-agnostic: every call into a payment
+// provider goes through the registry in @rustskinpay/shared/payments. To plug
+// in a new provider (NOWPayments, Coinbase Commerce, CryptoCloud, …) write an
+// implementation, register it in shared/payments/registry.ts, and add its env
+// vars — this file does not change.
+
+import { prisma, type PaymentProvider as PaymentProviderEnum, type Prisma } from '@rustskinpay/db';
+import {
+  createPaymentRegistry,
+  type PaymentProvider as ProviderImpl,
+  type PaymentProviderId,
+  type PaymentRegistry,
+} from '@rustskinpay/shared/payments';
 import { enqueueBuyAndDispatch } from './trade-queue.js';
 import { env } from '../env.js';
+
+// Singleton registry instance. Constructed lazily so tests can override.
+let registry: PaymentRegistry | null = null;
+export const getPaymentRegistry = (): PaymentRegistry => {
+  if (!registry) {
+    if (env.MOCK_PAYMENTS && env.NODE_ENV === 'production') {
+      throw new Error('MOCK_PAYMENTS must not be true in production');
+    }
+    registry = createPaymentRegistry({
+      webOrigin: env.WEB_ORIGIN,
+      mockPayments: env.MOCK_PAYMENTS,
+      stripe: {
+        secretKey: env.STRIPE_SECRET_KEY,
+        webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+      },
+    });
+  }
+  return registry;
+};
 
 export interface CreateSessionInput {
   orderId: string;
@@ -10,68 +40,66 @@ export interface CreateSessionInput {
   description: string;
   imageUrl?: string;
   buyerEmail?: string;
+  /** Force a specific provider; otherwise the registry default is used. */
+  providerId?: PaymentProviderId;
 }
 
 export interface CreateSessionResult {
   paymentId: string;
   redirectUrl: string;
+  providerId: PaymentProviderId;
 }
 
-const buildMockSessionId = (orderId: string): string =>
-  `mock_${orderId}_${Date.now().toString(36)}`;
+const buildSuccessUrl = (orderId: string): string =>
+  `${env.WEB_ORIGIN}/checkout/success?orderId=${orderId}`;
+const buildCancelUrl = (orderId: string): string =>
+  `${env.WEB_ORIGIN}/checkout/cancelled?orderId=${orderId}`;
+
+const resolveProvider = (providerId?: PaymentProviderId): ProviderImpl | null => {
+  const reg = getPaymentRegistry();
+  return providerId ? reg.get(providerId) : reg.default();
+};
 
 /**
- * Provider-agnostic entry point: given an Order, create a payment session.
- * When env.MOCK_PAYMENTS is true, Stripe is skipped and we redirect to our
- * local /checkout/mock page; the Payment row is still written so downstream
- * code is identical.
+ * Create a payment session via the chosen provider, persisting a Payment row
+ * so downstream webhook + refund flows can look it up.
+ *
+ * Returns null when no provider is enabled or the provider call fails — the
+ * caller (route handler) translates this into a 503 to the buyer.
  */
 export const createPaymentSession = async (
-  provider: PaymentProvider,
   input: CreateSessionInput,
 ): Promise<CreateSessionResult | null> => {
-  if (provider !== 'STRIPE') {
-    throw new Error(`payment provider not yet implemented: ${provider}`);
-  }
+  const provider = resolveProvider(input.providerId);
+  if (!provider) return null;
 
-  if (env.MOCK_PAYMENTS) {
-    const providerSessionId = buildMockSessionId(input.orderId);
-    const payment = await prisma.payment.create({
-      data: {
-        orderId: input.orderId,
-        provider: 'STRIPE',
-        providerSessionId,
-        amountMinor: input.amountMinor,
-        currency: input.currency,
-        status: 'PENDING',
-      },
-    });
-    const redirectUrl = `${env.WEB_ORIGIN}/checkout/mock?orderId=${encodeURIComponent(input.orderId)}`;
-    return { paymentId: payment.id, redirectUrl };
-  }
-
-  const successUrl = `${env.WEB_ORIGIN}/checkout/success?orderId=${input.orderId}`;
-  const cancelUrl = `${env.WEB_ORIGIN}/checkout/cancelled?orderId=${input.orderId}`;
-
-  const session = await createCheckoutSession({
-    ...input,
-    successUrl,
-    cancelUrl,
+  const session = await provider.createSession({
+    orderId: input.orderId,
+    amountMinor: input.amountMinor,
+    currency: input.currency,
+    description: input.description,
+    imageUrl: input.imageUrl,
+    buyerEmail: input.buyerEmail,
+    successUrl: buildSuccessUrl(input.orderId),
+    cancelUrl: buildCancelUrl(input.orderId),
   });
   if (!session) return null;
 
+  // Persist provider on the Payment row using the registry's id (Prisma enum
+  // values match the registry ids exactly).
   const payment = await prisma.payment.create({
     data: {
       orderId: input.orderId,
-      provider: 'STRIPE',
-      providerSessionId: session.id,
+      provider: provider.id as PaymentProviderEnum,
+      providerSessionId: session.providerSessionId,
+      providerPaymentIntentId: session.providerPaymentIntentId,
       amountMinor: input.amountMinor,
       currency: input.currency,
       status: 'PENDING',
     },
   });
 
-  return { paymentId: payment.id, redirectUrl: session.url };
+  return { paymentId: payment.id, redirectUrl: session.redirectUrl, providerId: provider.id };
 };
 
 export interface FinalizeOrderInput {
@@ -82,13 +110,9 @@ export interface FinalizeOrderInput {
 }
 
 /**
- * Mark an order as PAID and start fulfilment. Enqueues buy-and-dispatch — the
- * worker buys the item on the source marketplace and then sends a Steam trade.
- *
- * Idempotent: a no-op if the order is already PAID/FULFILLED. Returns whether
- * a follow-up job got enqueued so the caller can log it. If the buyer has no
- * trade URL, fulfilment is held (Order still goes PAID) and ops/UI can prompt
- * the buyer.
+ * Mark an order as PAID and start fulfilment. Idempotent: a no-op if the order
+ * is already PAID/FULFILLED. If the buyer has no trade URL, fulfilment is held
+ * (Order still goes PAID) and ops/UI can prompt the buyer.
  */
 export const finalizeOrderPayment = async (
   input: FinalizeOrderInput,
@@ -117,9 +141,6 @@ export const finalizeOrderPayment = async (
       return false;
     }
 
-    // Stripe Checkout collects an email from the card; persist it on the
-    // Order if we didn't have one. Also backfill User.email if the buyer
-    // signed in via Steam without one (Steam OpenID doesn't expose email).
     if (input.buyerEmail) {
       if (!order.buyerEmail) {
         await tx.order.update({
@@ -128,8 +149,6 @@ export const finalizeOrderPayment = async (
         });
       }
       if (order.buyer && !order.buyer.email) {
-        // Best-effort: ignore unique-constraint violation if another user
-        // already claimed this email.
         await tx.user
           .update({ where: { id: order.buyer.id }, data: { email: input.buyerEmail } })
           .catch(() => undefined);
@@ -178,5 +197,13 @@ export const cancelOrderPayment = async (input: {
       where: { orderId: order.id, state: 'PENDING' },
       data: { state: 'FAILED', errorCode: 'CHECKOUT_CANCELLED' },
     });
+  });
+};
+
+/** Mark all Payments matching the provider's payment_intent as REFUNDED. */
+export const markPaymentRefunded = async (providerPaymentIntentId: string): Promise<void> => {
+  await prisma.payment.updateMany({
+    where: { providerPaymentIntentId },
+    data: { status: 'REFUNDED' },
   });
 };

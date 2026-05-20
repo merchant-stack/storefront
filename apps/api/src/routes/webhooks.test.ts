@@ -1,47 +1,40 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { createStripeProvider } from '@rustskinpay/shared/payments';
 
-// We can't import the real handler without booting Fastify; instead we unit-test
-// the signature-verify gate and the event-routing logic by mocking the Stripe
-// SDK + payments service. This keeps the test fast and dep-free.
+// We test the Stripe provider's webhook verification and session creation
+// behaviour at the unit level — booting Fastify is overkill for the gate
+// logic, and the provider is the source of truth for the actual signature
+// check + Stripe SDK calls.
 
-describe('verifyWebhookEvent', () => {
-  it('returns null when signature missing', async () => {
-    vi.resetModules();
-    vi.doMock('../env.js', () => ({
-      env: { STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_x' },
-    }));
-    const { verifyWebhookEvent } = await import('../services/stripe.js');
-    expect(verifyWebhookEvent('{}', undefined)).toBeNull();
+describe('Stripe provider — verifyWebhook', () => {
+  it('returns null when signature header missing', () => {
+    const provider = createStripeProvider({ secretKey: 'sk_test_x', webhookSecret: 'whsec_x' });
+    expect(provider.verifyWebhook({ rawBody: '{}', headers: {} })).toBeNull();
   });
 
-  it('returns null when STRIPE_WEBHOOK_SECRET is missing', async () => {
-    vi.resetModules();
-    vi.doMock('../env.js', () => ({
-      env: { STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: undefined },
-    }));
-    const { verifyWebhookEvent } = await import('../services/stripe.js');
-    expect(verifyWebhookEvent('{}', 'some-sig')).toBeNull();
+  it('returns null when webhook secret is not configured', () => {
+    const provider = createStripeProvider({ secretKey: 'sk_test_x', webhookSecret: undefined });
+    expect(
+      provider.verifyWebhook({ rawBody: '{}', headers: { 'stripe-signature': 'some-sig' } }),
+    ).toBeNull();
   });
 
-  it('returns null when Stripe SDK rejects the signature', async () => {
-    vi.resetModules();
-    vi.doMock('../env.js', () => ({
-      env: { STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_x' },
-    }));
-    const { verifyWebhookEvent } = await import('../services/stripe.js');
-    // The real Stripe SDK throws SignatureVerificationError; verify returns null.
-    expect(verifyWebhookEvent('{"not": "real"}', 't=1,v1=invalid')).toBeNull();
+  it('returns null when Stripe SDK rejects the signature', () => {
+    const provider = createStripeProvider({ secretKey: 'sk_test_x', webhookSecret: 'whsec_x' });
+    expect(
+      provider.verifyWebhook({
+        rawBody: '{"not": "real"}',
+        headers: { 'stripe-signature': 't=1,v1=invalid' },
+      }),
+    ).toBeNull();
   });
 });
 
-describe('createCheckoutSession', () => {
-  it('returns null when STRIPE_SECRET_KEY is not set', async () => {
-    vi.resetModules();
-    vi.doMock('../env.js', () => ({
-      env: { STRIPE_SECRET_KEY: undefined, STRIPE_WEBHOOK_SECRET: undefined },
-    }));
-    const { createCheckoutSession } = await import('../services/stripe.js');
-    const result = await createCheckoutSession({
+describe('Stripe provider — createSession', () => {
+  it('returns null when secret key is not configured', async () => {
+    const provider = createStripeProvider({ secretKey: undefined, webhookSecret: undefined });
+    expect(provider.isEnabled()).toBe(false);
+    const result = await provider.createSession({
       orderId: 'order_x',
       amountMinor: 1500,
       currency: 'USD',

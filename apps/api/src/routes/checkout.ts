@@ -7,6 +7,10 @@ import { env } from '../env.js';
 
 const createCheckoutSchema = z.object({
   sourceItemId: z.string().min(1),
+  // Optional — when omitted the server picks the registry default. When
+  // multiple providers are enabled, the web client should pass a buyer's
+  // selection from a provider picker.
+  provider: z.string().optional(),
 });
 
 const INTERNAL_MERCHANT_ID = 'internal-merchant';
@@ -34,7 +38,7 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
     if (!parse.success) {
       return reply.code(400).send({ error: 'invalid_body', detail: parse.error.flatten() });
     }
-    const { sourceItemId } = parse.data;
+    const { sourceItemId, provider: providerId } = parse.data;
 
     // Idempotency: if the client retries the same checkout with the same
     // Idempotency-Key header (per-buyer), return the existing order instead of
@@ -121,12 +125,13 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
       return reply.code(409).send({ error: created.error });
     }
 
-    const result = await createPaymentSession('STRIPE', {
+    const result = await createPaymentSession({
       orderId: created.order.id,
       amountMinor: created.order.totalAmountMinor,
       currency: created.order.currency,
       description: created.item.displayName,
       imageUrl: created.item.iconUrl ?? undefined,
+      providerId,
     });
 
     if (!result) {

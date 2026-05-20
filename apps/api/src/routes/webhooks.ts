@@ -1,67 +1,106 @@
 import type { FastifyInstance } from 'fastify';
-import type Stripe from 'stripe';
 import { prisma } from '@rustskinpay/db';
-import { verifyWebhookEvent } from '../services/stripe.js';
-import { cancelOrderPayment, finalizeOrderPayment } from '../services/payments.js';
+import type { PaymentProvider as PaymentProviderEnum } from '@rustskinpay/db';
+import {
+  cancelOrderPayment,
+  finalizeOrderPayment,
+  getPaymentRegistry,
+  markPaymentRefunded,
+} from '../services/payments.js';
 
+/**
+ * Generic webhook endpoint. The provider is named in the URL path. Every
+ * provider implementation owns its signature verification + event translation
+ * via the PaymentProvider interface; the route only deals with idempotency,
+ * persistence, and dispatch to the orchestrator.
+ *
+ * Adding a new provider's webhook is automatic — once the provider is in the
+ * registry, the matching /api/webhooks/:provider URL starts accepting events.
+ */
 export const registerWebhookRoutes = (server: FastifyInstance): void => {
-  /**
-   * Stripe webhook handler.
-   *
-   * Stripe signs every webhook with STRIPE_WEBHOOK_SECRET. We verify the signature
-   * against the *raw* request body (Fastify-style: see config.rawBody below). If
-   * verification fails we 400 — Stripe will retry with backoff.
-   *
-   * We persist a WebhookEvent row keyed by (provider, providerEventId) for
-   * idempotency: if Stripe sends the same event twice we recognise it and skip.
-   */
   server.post(
-    '/api/webhooks/stripe',
-    {
-      config: { rawBody: true },
-    },
+    '/api/webhooks/:provider',
+    { config: { rawBody: true } },
     async (request, reply) => {
-      const signature = request.headers['stripe-signature'];
-      const sigHeader = Array.isArray(signature) ? signature[0] : signature;
+      const { provider: providerParam } = request.params as { provider: string };
+      const providerId = providerParam.toUpperCase();
+      const provider = getPaymentRegistry().get(providerId);
+      if (!provider) {
+        return reply.code(404).send({ error: 'unknown_provider' });
+      }
 
       const rawBody = (request as unknown as { rawBody?: string | Buffer }).rawBody;
       if (!rawBody) {
         return reply.code(400).send({ error: 'missing_raw_body' });
       }
 
-      const event = verifyWebhookEvent(rawBody, sigHeader);
-      if (!event) {
+      const envelope = provider.verifyWebhook({
+        rawBody,
+        headers: request.headers,
+      });
+      if (!envelope) {
         return reply.code(400).send({ error: 'invalid_signature' });
       }
 
-      // Idempotency check
+      // Idempotency check keyed by (provider, providerEventId). A duplicate
+      // delivery (the provider retried) short-circuits here.
       const seen = await prisma.webhookEvent.findUnique({
-        where: { provider_providerEventId: { provider: 'STRIPE', providerEventId: event.id } },
+        where: {
+          provider_providerEventId: {
+            provider: provider.id as PaymentProviderEnum,
+            providerEventId: envelope.eventId,
+          },
+        },
       });
       if (seen?.processed) {
         return reply.code(200).send({ received: true, duplicate: true });
       }
 
-      const stored = seen
-        ? seen
-        : await prisma.webhookEvent.create({
-            data: {
-              provider: 'STRIPE',
-              providerEventId: event.id,
-              eventType: event.type,
-              signatureValid: true,
-              rawPayload: event as unknown as object,
-            },
-          });
+      const stored =
+        seen ??
+        (await prisma.webhookEvent.create({
+          data: {
+            provider: provider.id as PaymentProviderEnum,
+            providerEventId: envelope.eventId,
+            eventType: envelope.eventType,
+            signatureValid: true,
+            rawPayload: envelope.parsed as object,
+          },
+        }));
 
       try {
-        await handleStripeEvent(event);
+        const interpreted = provider.interpretEvent(envelope);
+        if (interpreted) {
+          switch (interpreted.kind) {
+            case 'payment_succeeded':
+              await finalizeOrderPayment({
+                orderId: interpreted.orderId,
+                providerSessionId: interpreted.providerSessionId,
+                providerPaymentIntentId: interpreted.providerPaymentIntentId,
+                buyerEmail: interpreted.buyerEmail,
+              });
+              break;
+            case 'payment_cancelled':
+            case 'payment_failed':
+              await cancelOrderPayment({
+                orderId: interpreted.orderId,
+                providerSessionId: interpreted.providerSessionId,
+              });
+              break;
+            case 'refunded':
+              await markPaymentRefunded(interpreted.providerPaymentIntentId);
+              break;
+          }
+        }
         await prisma.webhookEvent.update({
           where: { id: stored.id },
           data: { processed: true, processedAt: new Date() },
         });
       } catch (err) {
-        request.log.error({ err, eventId: event.id }, 'failed to process stripe event');
+        request.log.error(
+          { err, provider: provider.id, eventId: envelope.eventId },
+          'failed to process webhook event',
+        );
         await prisma.webhookEvent.update({
           where: { id: stored.id },
           data: { errorMessage: err instanceof Error ? err.message : String(err) },
@@ -72,46 +111,4 @@ export const registerWebhookRoutes = (server: FastifyInstance): void => {
       return reply.code(200).send({ received: true });
     },
   );
-};
-
-const handleStripeEvent = async (event: Stripe.Event): Promise<void> => {
-  switch (event.type) {
-    case 'checkout.session.completed': {
-      const session = event.data.object;
-      const orderId = session.metadata?.orderId;
-      if (!orderId) return;
-      const buyerEmail =
-        session.customer_details?.email ?? session.customer_email ?? undefined;
-      await finalizeOrderPayment({
-        orderId,
-        providerSessionId: session.id,
-        providerPaymentIntentId:
-          typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
-        buyerEmail,
-      });
-      break;
-    }
-    case 'checkout.session.expired':
-    case 'checkout.session.async_payment_failed': {
-      const session = event.data.object;
-      const orderId = session.metadata?.orderId;
-      if (!orderId) return;
-      await cancelOrderPayment({ orderId, providerSessionId: session.id });
-      break;
-    }
-    case 'charge.refunded': {
-      const charge = event.data.object;
-      const paymentIntent =
-        typeof charge.payment_intent === 'string' ? charge.payment_intent : null;
-      if (!paymentIntent) return;
-      await prisma.payment.updateMany({
-        where: { providerPaymentIntentId: paymentIntent },
-        data: { status: 'REFUNDED' },
-      });
-      break;
-    }
-    default:
-      // No-op for events we don't care about (yet).
-      break;
-  }
 };

@@ -216,12 +216,14 @@ If you ever want auto-apply, add a `prisma migrate deploy` step to the api's Doc
 
 ### 8.3 Flipping sales on
 
-When a payment provider is ready:
+When you've picked a payment provider:
 
-1. Set the provider's keys in Render env (`STRIPE_SECRET_KEY`, etc. — both api and worker).
-2. Set `CHECKOUT_DISABLED=false` on both api and worker (worker doesn't use it directly today, but keep them in sync to avoid drift).
-3. Set `NEXT_PUBLIC_CHECKOUT_DISABLED=false` on Vercel, then redeploy the web (Next.js bakes `NEXT_PUBLIC_*` at build time — env-only changes require a redeploy).
-4. Test a real $1 purchase end-to-end.
+1. Implement / configure it per `PAYMENT_PROVIDERS.md`. The pipeline is provider-agnostic — Stripe, NOWPayments, Coinbase Commerce, CryptoCloud, or anything else slots in via a single file.
+2. Set the provider's keys in Render env on both api and worker.
+3. Webhook URL goes into the provider's dashboard as `https://api.rustskinpay.com/api/webhooks/<provider-id>` (lowercase or uppercase, both work). For Stripe today: `/api/webhooks/stripe`.
+4. Set `CHECKOUT_DISABLED=false` on the api.
+5. Set `NEXT_PUBLIC_CHECKOUT_DISABLED=false` on Vercel and redeploy web (Next.js bakes `NEXT_PUBLIC_*` at build time — env-only changes require a redeploy).
+6. Test a real $1 purchase end-to-end.
 
 ### 8.4 Costs at launch
 
