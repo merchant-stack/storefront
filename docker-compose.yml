@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: rustskinpay-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rustskinpay
+      POSTGRES_PASSWORD: rustskinpay
+      POSTGRES_DB: rustskinpay
+    ports:
+      - "5432:5432"
+    volumes:
+      - rustskinpay-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rustskinpay"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: rustskinpay-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - rustskinpay-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  rustskinpay-postgres:
+  rustskinpay-redis:

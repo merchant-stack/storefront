@@ -1,0 +1,445 @@
+// RustSkinPay database schema — Phase 1 (Marketplace MVP).
+//
+// Design notes:
+//   - Money is always stored as integer minor units (cents). Currency is a string code.
+//   - IDs use cuid for internal use; embeddable widget / API surfaces will prefix on the way out.
+//   - Order.merchantId is present from day 1 so Phase 3 multi-tenancy needs no migration.
+//   - JSON columns are JSONB on Postgres.
+//   - All status fields are enums for query safety.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =========================================================================
+// Users + Steam accounts
+// =========================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id          String    @id @default(cuid())
+  steamId64   String    @unique
+  displayName String
+  avatarUrl   String?
+  tradeUrl    String? // Steam trade URL — required before user can receive items
+  email       String?   @unique
+  role        UserRole  @default(USER)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  inventoryItems InventoryItem[]
+  listings       Listing[]       @relation("seller")
+  orders         Order[]         @relation("buyer")
+  auditLogs      AuditLog[]
+
+  @@index([steamId64])
+}
+
+// =========================================================================
+// Steam item catalog
+// =========================================================================
+
+model SteamItem {
+  id             String   @id @default(cuid())
+  appId          Int // 252490 for Rust
+  classId        String
+  instanceId     String   @default("0")
+  marketHashName String
+  displayName    String
+  iconUrl        String?
+  type           String?
+  rarity         String?
+  marketable     Boolean  @default(true)
+  tradable       Boolean  @default(true)
+  lastSyncedAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  inventoryItems InventoryItem[]
+  listings       Listing[]
+  priceSnapshots PriceSnapshot[]
+  sourceItems    SourceItem[]
+
+  @@unique([appId, classId, instanceId])
+  @@unique([appId, marketHashName])
+  @@index([appId, type])
+}
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steamItemId   String
+  steamItem     SteamItem @relation(fields: [steamItemId], references: [id])
+  assetId       String // Steam's per-instance asset id (unique per Steam inventory)
+  tradable      Boolean   @default(true)
+  tradableAfter DateTime?
+  lastSyncedAt  DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  listing Listing?
+
+  @@unique([userId, assetId])
+  @@index([userId])
+  @@index([steamItemId])
+}
+
+model PriceSnapshot {
+  id               String      @id @default(cuid())
+  steamItemId      String
+  steamItem        SteamItem   @relation(fields: [steamItemId], references: [id], onDelete: Cascade)
+  source           PriceSource @default(STEAM_MARKET)
+  medianPriceMinor Int?
+  lowestPriceMinor Int?
+  volume           Int?
+  currency         String      @default("USD")
+  rawPayload       Json?
+  createdAt        DateTime    @default(now())
+
+  @@index([steamItemId, createdAt(sort: Desc)])
+}
+
+enum PriceSource {
+  STEAM_MARKET
+  CUSTOM
+  EXTERNAL_API
+  DMARKET
+}
+
+// =========================================================================
+// External sources (arbitrage catalog)
+// =========================================================================
+
+enum SourceProvider {
+  DMARKET
+  SKINPORT
+  LIS_SKINS
+}
+
+/// Items we offer for sale on the storefront, sourced from external marketplaces.
+/// Refreshed periodically by the sync worker. Each row is a snapshot of a live
+/// external offer with our markup applied.
+model SourceItem {
+  id               String         @id @default(cuid())
+  provider         SourceProvider
+  sourceOfferId    String // the offer ID on the source marketplace
+  steamItemId      String? // optional join to canonical Steam catalog
+  steamItem        SteamItem?     @relation(fields: [steamItemId], references: [id])
+  gameId           String // 'rust', 'csgo', etc. (source's identifier)
+  marketHashName   String
+  displayName      String
+  iconUrl          String?
+  type             String?
+  rarity           String?
+  sourcePriceMinor Int // what we'd pay on the source
+  salePriceMinor   Int // what we charge the buyer (= source + markup)
+  markupBps        Int // basis points; 1500 = 15%
+  currency         String         @default("USD")
+  available        Boolean        @default(true)
+  rawPayload       Json?
+  lastSyncedAt     DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  orderItems OrderItem[]
+
+  @@unique([provider, sourceOfferId])
+  @@index([available, gameId, salePriceMinor])
+  @@index([steamItemId])
+  @@index([lastSyncedAt])
+}
+
+enum SourceTransactionState {
+  PENDING
+  EXECUTING
+  SUCCESS
+  FAILED
+  REFUND_REQUIRED
+}
+
+/// One buy-on-source attempt triggered by a paid Order. Tracks the "leg" between
+/// our payment receipt (Stripe success) and the source marketplace handing the
+/// item over to our bot.
+model SourceTransaction {
+  id                String                 @id @default(cuid())
+  orderId           String
+  order             Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider          SourceProvider
+  sourceOfferId     String
+  sourcePaymentId   String? // populated after the source confirms our buy
+  state             SourceTransactionState @default(PENDING)
+  amountSpentMinor  Int?
+  currency          String                 @default("USD")
+  errorCode         String?
+  errorMessage      String?
+  attemptCount      Int                    @default(0)
+  rawRequest        Json?
+  rawResponse       Json?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  succeededAt       DateTime?
+
+  @@index([orderId])
+  @@index([state, createdAt])
+  @@index([provider, sourcePaymentId])
+}
+
+// =========================================================================
+// Marketplace listings (LEGACY — to be removed post-pivot. Kept temporarily so
+// existing API routes compile while they get refactored to read SourceItem.)
+// =========================================================================
+
+enum ListingStatus {
+  ACTIVE
+  RESERVED
+  SOLD
+  CANCELLED
+  EXPIRED
+}
+
+model Listing {
+  id              String        @id @default(cuid())
+  sellerId        String
+  seller          User          @relation("seller", fields: [sellerId], references: [id])
+  inventoryItemId String        @unique
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  steamItemId     String // denormalized for cheaper queries
+  steamItem       SteamItem     @relation(fields: [steamItemId], references: [id])
+  priceMinor      Int
+  currency        String        @default("USD")
+  status          ListingStatus @default(ACTIVE)
+  reservedAt      DateTime?
+  soldAt          DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([status, steamItemId])
+  @@index([sellerId, status])
+  @@index([status, priceMinor])
+}
+
+// =========================================================================
+// Merchants (Phase 1: a single internal merchant. Phase 3: many.)
+// =========================================================================
+
+enum MerchantStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+model Merchant {
+  id                 String         @id @default(cuid())
+  name               String
+  isInternal         Boolean        @default(false) // true for the RustSkinPay marketplace itself
+  status             MerchantStatus @default(ACTIVE)
+  apiKeyHash         String?        @unique
+  webhookUrl         String?
+  webhookSecret      String?
+  settlementCurrency String         @default("USD")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  orders Order[]
+}
+
+// =========================================================================
+// Orders + payments
+// =========================================================================
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  FULFILLING
+  FULFILLED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  merchantId       String
+  merchant         Merchant    @relation(fields: [merchantId], references: [id])
+  buyerId          String?
+  buyer            User?       @relation("buyer", fields: [buyerId], references: [id])
+  buyerEmail       String?
+  buyerSteamId64   String? // for marketplace orders where buyer is a RustSkinPay user
+  status           OrderStatus @default(PENDING_PAYMENT)
+  totalAmountMinor Int
+  currency         String      @default("USD")
+  description      String?
+  metadata         Json? // merchant-supplied metadata (for embeddable widget)
+  idempotencyKey   String?     @unique
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  paidAt           DateTime?
+  fulfilledAt      DateTime?
+  cancelledAt      DateTime?
+
+  items              OrderItem[]
+  payments           Payment[]
+  trades             Trade[]
+  sourceTransactions SourceTransaction[]
+
+  @@index([merchantId, status])
+  @@index([buyerId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model OrderItem {
+  id            String      @id @default(cuid())
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  listingId     String? // LEGACY — kept while marketplace code is migrated
+  listing       Listing?    @relation(fields: [listingId], references: [id])
+  sourceItemId  String? // new: which SourceItem the buyer chose
+  sourceItem    SourceItem? @relation(fields: [sourceItemId], references: [id])
+  // Snapshot fields — captured at order time so price/name don't drift
+  itemName      String
+  iconUrl       String?
+  priceMinor    Int
+  currency      String      @default("USD")
+  createdAt     DateTime    @default(now())
+
+  @@index([orderId])
+  @@index([listingId])
+  @@index([sourceItemId])
+}
+
+enum PaymentProvider {
+  STRIPE
+  NOWPAYMENTS
+  COINBASE_COMMERCE
+}
+
+enum PaymentStatus {
+  PENDING
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id                      String          @id @default(cuid())
+  orderId                 String
+  order                   Order           @relation(fields: [orderId], references: [id])
+  provider                PaymentProvider
+  providerSessionId       String? // e.g. Stripe checkout session id
+  providerPaymentIntentId String?
+  providerChargeId        String?
+  amountMinor             Int
+  currency                String          @default("USD")
+  status                  PaymentStatus   @default(PENDING)
+  failureCode             String?
+  failureMessage          String?
+  rawProviderData         Json?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  succeededAt             DateTime?
+
+  @@index([orderId])
+  @@index([providerSessionId])
+  @@index([providerPaymentIntentId])
+  @@index([provider, status])
+}
+
+// =========================================================================
+// Steam trade dispatch
+// =========================================================================
+
+enum TradeStatus {
+  QUEUED
+  SENDING
+  SENT
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+  ESCROW
+  INVALID
+  FAILED
+}
+
+model Trade {
+  id              String      @id @default(cuid())
+  orderId         String
+  order           Order       @relation(fields: [orderId], references: [id])
+  botSteamId64    String
+  buyerSteamId64  String
+  buyerTradeUrl   String
+  tradeOfferId    String? // populated after Steam accepts the offer
+  status          TradeStatus @default(QUEUED)
+  attemptCount    Int         @default(0)
+  escrowEndsAt    DateTime?
+  errorCode       String?
+  errorMessage    String?
+  rawSteamPayload Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  sentAt          DateTime?
+  completedAt     DateTime?
+
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@index([tradeOfferId])
+}
+
+// =========================================================================
+// Webhook ingestion (idempotency + audit)
+// =========================================================================
+
+model WebhookEvent {
+  id              String          @id @default(cuid())
+  provider        PaymentProvider
+  providerEventId String
+  eventType       String
+  signatureValid  Boolean         @default(false)
+  processed       Boolean         @default(false)
+  processedAt     DateTime?
+  errorMessage    String?
+  rawPayload      Json
+  createdAt       DateTime        @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([processed, createdAt])
+}
+
+// =========================================================================
+// Audit log
+// =========================================================================
+
+enum ActorType {
+  USER
+  SYSTEM
+  ADMIN
+  MERCHANT
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorType  ActorType
+  actorId    String?
+  user       User?     @relation(fields: [actorId], references: [id], onDelete: SetNull, map: "AuditLog_user_fkey")
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorType, actorId, createdAt(sort: Desc)])
+}
