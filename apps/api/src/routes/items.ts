@@ -4,6 +4,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma, type Prisma } from '@rustskinpay/db';
+import { env } from '../env.js';
 
 const listQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
@@ -62,7 +63,11 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
     });
 
     const hasMore = rows.length > q.limit;
-    const items = hasMore ? rows.slice(0, q.limit) : rows;
+    const sliced = hasMore ? rows.slice(0, q.limit) : rows;
+    const items = sliced.map((it) => ({
+      ...it,
+      purchasable: it.salePriceMinor <= env.MAX_BUY_PRICE_MINOR,
+    }));
     const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null;
 
     return { items, nextCursor };
@@ -112,6 +117,8 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
       },
     });
     if (!item) return reply.code(404).send({ error: 'not_found' });
-    return { item };
+    return {
+      item: { ...item, purchasable: item.salePriceMinor <= env.MAX_BUY_PRICE_MINOR },
+    };
   });
 };

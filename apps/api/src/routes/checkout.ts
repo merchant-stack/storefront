@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@rustskinpay/db';
 import { readSession } from '../auth/session.js';
 import { createPaymentSession } from '../services/payments.js';
+import { env } from '../env.js';
 
 const createCheckoutSchema = z.object({
   sourceItemId: z.string().min(1),
@@ -50,7 +51,13 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
 
     const created = await prisma.$transaction(async (tx) => {
       const item = await tx.sourceItem.findUnique({ where: { id: sourceItemId } });
-      if (!item || !item.available) return null;
+      if (!item || !item.available) return { error: 'item_unavailable' as const };
+      // Soft cap: refuse anything above the configured ceiling. UI shows a
+      // "restocking" message; this is the server-side guard against a tampered
+      // client.
+      if (item.salePriceMinor > env.MAX_BUY_PRICE_MINOR) {
+        return { error: 'item_temporarily_unavailable' as const };
+      }
 
       const buyer = await tx.user.findUnique({ where: { id: session.sub } });
       if (!buyer) return null;
@@ -92,6 +99,9 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
 
     if (!created) {
       return reply.code(409).send({ error: 'item_unavailable' });
+    }
+    if ('error' in created) {
+      return reply.code(409).send({ error: created.error });
     }
 
     const result = await createPaymentSession('STRIPE', {

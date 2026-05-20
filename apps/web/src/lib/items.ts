@@ -11,6 +11,8 @@ export interface ItemDTO {
   rarity: string | null;
   salePriceMinor: number;
   currency: string;
+  /** False when the item is currently above our fulfilment ceiling — UI shows "restocking soon". */
+  purchasable: boolean;
   available?: boolean;
   lastSyncedAt: string;
 }

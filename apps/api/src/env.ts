@@ -29,6 +29,10 @@ const schema = z.object({
   DMARKET_SECRET_KEY: optionalNonEmpty,
   DMARKET_BASE_URL: z.string().url().default('https://api.dmarket.com'),
   DMARKET_DEFAULT_MARKUP_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
+  // Soft cap on what we'll actually fulfil. Items priced above this are still
+  // shown on the storefront but can't be purchased yet — we display a
+  // "restocking" message. Raise (in cents) as bot balance + ops confidence grows.
+  MAX_BUY_PRICE_MINOR: z.coerce.number().int().positive().default(500),
 });
 
 const parsed = schema.safeParse(process.env);

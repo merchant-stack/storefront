@@ -9,13 +9,20 @@ interface Props {
 
 export const ItemCard = ({ item }: Props) => {
   const rarity = rarityClasses(item.rarity);
+  const purchasable = item.purchasable !== false;
   return (
     <Link
       href={`/market/${item.id}`}
-      className="group relative flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-zinc-900/40 transition-all duration-300 hover:-translate-y-0.5 hover:border-brand/40 hover:bg-zinc-900/60"
+      className={`group relative flex flex-col overflow-hidden rounded-lg border border-white/[0.06] bg-zinc-900/40 transition-all duration-300 ${
+        purchasable ? 'hover:-translate-y-0.5 hover:border-brand/40 hover:bg-zinc-900/60' : 'hover:border-white/15'
+      }`}
     >
-      {/* Image plate — clean uniform dark, no per-item color noise */}
-      <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-zinc-800/60 to-zinc-900/60 p-5">
+      {/* Image plate */}
+      <div
+        className={`relative aspect-square overflow-hidden bg-gradient-to-br from-zinc-800/60 to-zinc-900/60 p-5 ${
+          purchasable ? '' : 'opacity-70'
+        }`}
+      >
         {item.iconUrl ? (
           <img
             src={item.iconUrl}
@@ -33,6 +40,11 @@ export const ItemCard = ({ item }: Props) => {
             {item.rarity}
           </span>
         ) : null}
+        {!purchasable ? (
+          <span className="absolute left-3 top-3 rounded-md border border-amber-400/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-300 backdrop-blur">
+            Restocking
+          </span>
+        ) : null}
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-4">
@@ -41,11 +53,21 @@ export const ItemCard = ({ item }: Props) => {
         </div>
         {item.type ? <div className="text-xs text-zinc-500">{item.type}</div> : null}
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="font-display text-lg font-bold tabular-nums text-brand">
+          <span
+            className={`font-display text-lg font-bold tabular-nums ${
+              purchasable ? 'text-brand' : 'text-zinc-400'
+            }`}
+          >
             {formatPrice(item.salePriceMinor, item.currency)}
           </span>
-          <span className="text-xs text-zinc-500 transition-colors group-hover:text-brand">
-            Buy →
+          <span
+            className={`text-xs ${
+              purchasable
+                ? 'text-zinc-500 transition-colors group-hover:text-brand'
+                : 'text-amber-300/70'
+            }`}
+          >
+            {purchasable ? 'Buy →' : 'Soon'}
           </span>
         </div>
       </div>

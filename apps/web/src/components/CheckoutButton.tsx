@@ -28,7 +28,13 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
       }
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? `Checkout failed (${res.status})`);
+        const friendly =
+          body?.error === 'item_temporarily_unavailable'
+            ? "Sorry — this item is temporarily out of stock. We're restocking soon."
+            : body?.error === 'item_unavailable'
+              ? 'This item is no longer available.'
+              : (body?.error ?? `Checkout failed (${res.status})`);
+        setError(friendly);
         return;
       }
       const data = (await res.json()) as { redirectUrl: string };
