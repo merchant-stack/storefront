@@ -76,7 +76,7 @@ export const Footer = () => {
         <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-white/[0.06] pt-8 text-xs text-zinc-500 sm:flex-row sm:items-center">
           <p>© {new Date().getFullYear()} RustSkinPay. Not affiliated with Valve or Facepunch Studios.</p>
           <p>
-            Skins sourced via licensed third-party marketplaces. All transactions secured by Stripe.
+            All transactions secured by Stripe. Delivery via Steam trade offers.
           </p>
         </div>
       </div>

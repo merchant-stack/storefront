@@ -71,7 +71,7 @@ interface DMarketRawOffer {
   classId?: string;
   title?: string;
   image?: string;
-  extra?: { categoryPath?: string; rarity?: string; nameColor?: string };
+  extra?: { categoryPath?: string; type?: string; rarity?: string; nameColor?: string };
   price?: { USD?: string };
   marketHashName?: string;
   game?: string;
@@ -223,6 +223,13 @@ function bytesToHex(bytes: Uint8Array): string {
 
 function normaliseOffer(o: DMarketRawOffer): DMarketOffer {
   const priceUsd = o.price?.USD ? Number(o.price.USD) : 0;
+  // Prefer extra.type (granular: "jacket", "boots", "ak47") over categoryPath
+  // ("clothing", "weapon") because narrow types make filtering actually useful.
+  // Fall back to categoryPath then top-level type so we never lose data.
+  const type = o.extra?.type ?? o.extra?.categoryPath ?? o.type;
+  // DMarket doesn't expose rarity for most Rust offers; nameColor is a rough
+  // proxy (green=uncommon, blue=rare, …) but mapping is unreliable, so we leave
+  // rarity null unless DMarket gives us an explicit string.
   return {
     offerId: o.itemId ?? '',
     itemId: o.itemId ?? '',
@@ -230,12 +237,22 @@ function normaliseOffer(o: DMarketRawOffer): DMarketOffer {
     marketHashName: o.marketHashName ?? o.title ?? '',
     title: o.title ?? o.marketHashName ?? '',
     imageUrl: o.image,
-    type: o.extra?.categoryPath ?? o.type,
+    type: type ? titleCase(type) : undefined,
     rarity: o.extra?.rarity,
     priceMinor: Math.round(priceUsd * 100),
     currency: 'USD',
     raw: o,
   };
+}
+
+function titleCase(s: string): string {
+  return s
+    .split(/[\s_-]+/)
+    .map((w) => {
+      const first = w[0];
+      return first ? first.toUpperCase() + w.slice(1).toLowerCase() : w;
+    })
+    .join(' ');
 }
 
 function generateMockOffers(gameId: string, limit: number): DMarketOffer[] {

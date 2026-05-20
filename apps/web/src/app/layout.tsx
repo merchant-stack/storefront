@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: '%s — RustSkinPay',
   },
   description:
-    'Buy Rust skins with instant Steam delivery. Pay once — we source the item, our bot sends it to your account. No listing, no escrow, no waiting.',
+    'Buy Rust skins with instant Steam delivery. Pay once — we handle the rest. No listing, no escrow, no waiting.',
   metadataBase: new URL('https://rustskinpay.com'),
   openGraph: {
     title: 'RustSkinPay',

@@ -50,7 +50,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ id: s
           <ul className="space-y-2 text-sm text-zinc-400">
             <li className="flex items-start gap-2">
               <Check />
-              We source the item from a licensed marketplace after payment.
+              Instant delivery to your Steam account after payment.
             </li>
             <li className="flex items-start gap-2">
               <Check />

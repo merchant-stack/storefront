@@ -14,7 +14,7 @@ const TERMINAL_STATUSES: OrderStatus[] = ['FULFILLED', 'FAILED', 'CANCELLED', 'R
 const STATUS_META: Record<OrderStatus, { label: string; tone: 'pending' | 'progress' | 'success' | 'error' }> = {
   PENDING_PAYMENT: { label: 'Awaiting payment', tone: 'pending' },
   PAID: { label: 'Payment received', tone: 'progress' },
-  FULFILLING: { label: 'Sourcing & dispatching', tone: 'progress' },
+  FULFILLING: { label: 'Preparing your delivery', tone: 'progress' },
   FULFILLED: { label: 'Delivered to Steam', tone: 'success' },
   FAILED: { label: 'Failed', tone: 'error' },
   CANCELLED: { label: 'Cancelled', tone: 'error' },
@@ -22,10 +22,10 @@ const STATUS_META: Record<OrderStatus, { label: string; tone: 'pending' | 'progr
 };
 
 const SRC_TX_META: Record<SourceTransactionState, { label: string; tone: 'pending' | 'progress' | 'success' | 'error' }> = {
-  PENDING: { label: 'Waiting to buy on source', tone: 'pending' },
-  EXECUTING: { label: 'Buying on source marketplace', tone: 'progress' },
-  SUCCESS: { label: 'Bought on source', tone: 'success' },
-  FAILED: { label: 'Source buy failed', tone: 'error' },
+  PENDING: { label: 'Locating your skin', tone: 'pending' },
+  EXECUTING: { label: 'Securing your skin', tone: 'progress' },
+  SUCCESS: { label: 'Skin secured', tone: 'success' },
+  FAILED: { label: 'Could not locate your skin', tone: 'error' },
   REFUND_REQUIRED: { label: 'Refund pending', tone: 'error' },
 };
 
@@ -113,7 +113,7 @@ export const OrderStatusTracker = ({ orderId }: Props) => {
           done={srcTx ? ['SUCCESS', 'FAILED', 'REFUND_REQUIRED'].includes(srcTx.state) : false}
           active={srcTx?.state === 'EXECUTING' || srcTx?.state === 'PENDING'}
           tone={srcTx ? SRC_TX_META[srcTx.state].tone : 'pending'}
-          label={srcTx ? SRC_TX_META[srcTx.state].label : 'Sourcing item'}
+          label={srcTx ? SRC_TX_META[srcTx.state].label : 'Locating your skin'}
           sub={srcTx?.errorCode ? `Error: ${srcTx.errorCode}` : undefined}
         />
         <Step

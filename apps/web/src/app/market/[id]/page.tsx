@@ -78,7 +78,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
               {formatPrice(item.salePriceMinor, item.currency)}
             </div>
             <p className="mt-2 text-xs text-zinc-500">
-              All-in. Includes sourcing fee. Cards + crypto accepted at checkout.
+              All-in price. Cards + crypto accepted at checkout.
             </p>
 
             <form action={`/checkout/${item.id}`} method="get" className="mt-6">
@@ -95,12 +95,12 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
           <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">
             <div className="card p-4">
-              <dt className="label">Source</dt>
-              <dd className="mt-1 font-medium">{item.provider}</dd>
-            </div>
-            <div className="card p-4">
               <dt className="label">Delivery</dt>
               <dd className="mt-1 font-medium">Steam trade · minutes</dd>
+            </div>
+            <div className="card p-4">
+              <dt className="label">Payment</dt>
+              <dd className="mt-1 font-medium">Card · crypto</dd>
             </div>
             <div className="card p-4">
               <dt className="label">Last refreshed</dt>

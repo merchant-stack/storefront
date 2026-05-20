@@ -9,7 +9,6 @@ export interface ItemDTO {
   rarity: string | null;
   salePriceMinor: number;
   currency: string;
-  provider: 'DMARKET' | 'SKINPORT' | 'LIS_SKINS';
   available?: boolean;
   lastSyncedAt: string;
 }
@@ -49,4 +48,15 @@ export const getItem = async (id: string): Promise<ItemDTO | null> => {
   if (!res.ok) return null;
   const data = (await res.json()) as { item: ItemDTO };
   return data.item;
+};
+
+export interface Facets {
+  types: Array<{ value: string; count: number }>;
+  rarities: Array<{ value: string; count: number }>;
+}
+
+export const getFacets = async (): Promise<Facets> => {
+  const res = await fetch(`${API_URL}/api/items/facets`, { next: { revalidate: 60 } });
+  if (!res.ok) return { types: [], rarities: [] };
+  return (await res.json()) as Facets;
 };

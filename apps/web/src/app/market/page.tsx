@@ -1,4 +1,5 @@
-import { getItems } from '@/lib/items';
+import Link from 'next/link';
+import { getFacets, getItems } from '@/lib/items';
 import { ItemCard } from '@/components/ItemCard';
 
 interface SearchParams {
@@ -8,27 +9,28 @@ interface SearchParams {
   rarity?: string;
 }
 
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
-const TYPES = ['Weapon', 'Clothing', 'Armor', 'Door', 'Face Mask', 'Bandana'];
-
 export default async function MarketPage({
   searchParams,
 }: {
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
-  const { items } = await getItems({
-    q: params.q,
-    sort: params.sort ?? 'newest',
-    type: params.type,
-    rarity: params.rarity,
-    limit: 60,
-  });
+  const [{ items }, facets] = await Promise.all([
+    getItems({
+      q: params.q,
+      sort: params.sort ?? 'newest',
+      type: params.type,
+      rarity: params.rarity,
+      limit: 60,
+    }),
+    getFacets(),
+  ]);
 
   const activeRarity = params.rarity?.toLowerCase();
   const activeType = params.type?.toLowerCase();
+  const hasFilters = Boolean(params.q || params.type || params.rarity);
 
-  const filterLink = (key: 'rarity' | 'type', value: string | null) => {
+  const linkWith = (key: 'rarity' | 'type', value: string | null) => {
     const next = new URLSearchParams();
     if (params.q) next.set('q', params.q);
     if (params.sort) next.set('sort', params.sort);
@@ -41,11 +43,21 @@ export default async function MarketPage({
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">Buy Rust skins</h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          {items.length} item{items.length === 1 ? '' : 's'} live · synced every 5 min from DMarket
-        </p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold sm:text-4xl">Buy Rust skins</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            {items.length} item{items.length === 1 ? '' : 's'} matching · live inventory
+          </p>
+        </div>
+        {hasFilters ? (
+          <Link href="/market" className="btn-ghost text-xs text-zinc-400">
+            Clear filters
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[260px_1fr]">
@@ -85,109 +97,76 @@ export default async function MarketPage({
           </form>
 
           {/* Sort */}
-          <div className="space-y-2">
-            <h3 className="label">Sort</h3>
-            <div className="space-y-1">
-              {[
+          <FilterGroup title="Sort">
+            {(
+              [
                 { v: 'newest', l: 'Newest' },
-                { v: 'price_asc', l: 'Price — low to high' },
-                { v: 'price_desc', l: 'Price — high to low' },
-              ].map((opt) => {
-                const next = new URLSearchParams();
-                if (params.q) next.set('q', params.q);
-                if (params.type) next.set('type', params.type);
-                if (params.rarity) next.set('rarity', params.rarity);
-                next.set('sort', opt.v);
-                const active = (params.sort ?? 'newest') === opt.v;
-                return (
-                  <a
-                    key={opt.v}
-                    href={`/market?${next.toString()}`}
-                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                      active
-                        ? 'bg-brand/15 text-brand'
-                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'
-                    }`}
-                  >
-                    {opt.l}
-                    {active ? <span className="h-1.5 w-1.5 rounded-full bg-brand" /> : null}
-                  </a>
-                );
-              })}
-            </div>
-          </div>
+                { v: 'price_asc', l: 'Price ↑' },
+                { v: 'price_desc', l: 'Price ↓' },
+              ] as const
+            ).map((opt) => {
+              const next = new URLSearchParams();
+              if (params.q) next.set('q', params.q);
+              if (params.type) next.set('type', params.type);
+              if (params.rarity) next.set('rarity', params.rarity);
+              next.set('sort', opt.v);
+              return (
+                <FilterRow
+                  key={opt.v}
+                  href={`/market?${next.toString()}`}
+                  active={(params.sort ?? 'newest') === opt.v}
+                  label={opt.l}
+                  variant="sort"
+                />
+              );
+            })}
+          </FilterGroup>
 
-          {/* Rarity */}
-          <div className="space-y-2">
-            <h3 className="label">Rarity</h3>
-            <div className="space-y-1">
-              <a
-                href={filterLink('rarity', null)}
-                className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
-                  !activeRarity
-                    ? 'bg-white/[0.06] text-white'
-                    : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'
-                }`}
-              >
-                Any
-              </a>
-              {RARITIES.map((r) => {
-                const active = activeRarity === r.toLowerCase();
-                return (
-                  <a
-                    key={r}
-                    href={filterLink('rarity', r)}
-                    className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
-                      active
-                        ? 'bg-white/[0.06] text-white'
-                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'
-                    }`}
-                  >
-                    {r}
-                  </a>
-                );
-              })}
-            </div>
-          </div>
+          {/* Type — dynamic from DB */}
+          {facets.types.length > 0 ? (
+            <FilterGroup title="Type">
+              <FilterRow
+                href={linkWith('type', null)}
+                active={!activeType}
+                label="All types"
+              />
+              {facets.types.map((t) => (
+                <FilterRow
+                  key={t.value}
+                  href={linkWith('type', t.value)}
+                  active={activeType === t.value.toLowerCase()}
+                  label={t.value}
+                  count={t.count}
+                />
+              ))}
+            </FilterGroup>
+          ) : null}
 
-          {/* Type */}
-          <div className="space-y-2">
-            <h3 className="label">Type</h3>
-            <div className="space-y-1">
-              <a
-                href={filterLink('type', null)}
-                className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
-                  !activeType
-                    ? 'bg-white/[0.06] text-white'
-                    : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'
-                }`}
-              >
-                Any
-              </a>
-              {TYPES.map((t) => {
-                const active = activeType === t.toLowerCase();
-                return (
-                  <a
-                    key={t}
-                    href={filterLink('type', t)}
-                    className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
-                      active
-                        ? 'bg-white/[0.06] text-white'
-                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'
-                    }`}
-                  >
-                    {t}
-                  </a>
-                );
-              })}
-            </div>
-          </div>
+          {/* Rarity — dynamic from DB. Hidden if catalog has no rarity data. */}
+          {facets.rarities.length > 0 ? (
+            <FilterGroup title="Rarity">
+              <FilterRow
+                href={linkWith('rarity', null)}
+                active={!activeRarity}
+                label="Any rarity"
+              />
+              {facets.rarities.map((r) => (
+                <FilterRow
+                  key={r.value}
+                  href={linkWith('rarity', r.value)}
+                  active={activeRarity === r.value.toLowerCase()}
+                  label={r.value}
+                  count={r.count}
+                />
+              ))}
+            </FilterGroup>
+          ) : null}
         </aside>
 
         {/* Grid */}
         <div>
           {items.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 p-16 text-center">
+            <div className="rounded-2xl border border-dashed border-white/10 p-16 text-center">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-white/[0.04] text-zinc-500">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-6 w-6">
                   <path
@@ -198,9 +177,9 @@ export default async function MarketPage({
                 </svg>
               </div>
               <p className="mt-4 text-zinc-400">No skins match your filters.</p>
-              <a href="/market" className="mt-4 inline-flex text-sm text-brand hover:underline">
+              <Link href="/market" className="btn-secondary mt-5 inline-flex text-sm">
                 Clear filters
-              </a>
+              </Link>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
@@ -214,3 +193,48 @@ export default async function MarketPage({
     </main>
   );
 }
+
+const FilterGroup = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div>
+    <h3 className="label mb-2">{title}</h3>
+    <div className="space-y-0.5">{children}</div>
+  </div>
+);
+
+const FilterRow = ({
+  href,
+  active,
+  label,
+  count,
+  variant = 'default',
+}: {
+  href: string;
+  active: boolean;
+  label: string;
+  count?: number;
+  variant?: 'default' | 'sort';
+}) => (
+  <Link
+    href={href}
+    className={`group flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+      active
+        ? variant === 'sort'
+          ? 'bg-brand/15 text-brand'
+          : 'bg-white/[0.07] text-white'
+        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'
+    }`}
+  >
+    <span className="truncate">{label}</span>
+    {typeof count === 'number' ? (
+      <span
+        className={`ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
+          active ? 'bg-white/10 text-white' : 'bg-white/[0.04] text-zinc-500 group-hover:text-zinc-400'
+        }`}
+      >
+        {count}
+      </span>
+    ) : active && variant === 'sort' ? (
+      <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+    ) : null}
+  </Link>
+);

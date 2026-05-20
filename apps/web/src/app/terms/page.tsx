@@ -10,10 +10,9 @@ export default function TermsPage() {
 
       <h2>What RustSkinPay does</h2>
       <p>
-        RustSkinPay is a reseller of in-game cosmetic items for Rust. When you buy a skin from
-        us, we source it from a licensed third-party marketplace and dispatch it to your Steam
+        RustSkinPay sells in-game cosmetic items for Rust and dispatches them to your Steam
         account via a Steam trade offer. We are not affiliated with Valve, Facepunch Studios,
-        or any third-party marketplace.
+        or any inventory partner platform.
       </p>
 
       <h2>Your account</h2>

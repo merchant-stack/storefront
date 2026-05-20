@@ -21,7 +21,7 @@ export default async function CheckoutSuccessPage({
         </div>
         <h1 className="mt-5 font-display text-3xl font-bold">Payment received</h1>
         <p className="mt-2 text-zinc-400">
-          We&apos;re sourcing your skin and dispatching the Steam trade offer.
+          We&apos;re preparing your delivery and sending the Steam trade offer.
         </p>
       </div>
 

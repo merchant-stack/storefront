@@ -16,7 +16,7 @@ export default async function HomePage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            Live inventory · refreshed every 5 minutes
+            Live inventory · instant delivery
           </div>
           <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight text-balance sm:text-6xl lg:text-7xl">
             Rust skins, delivered to Steam{' '}
@@ -25,8 +25,8 @@ export default async function HomePage() {
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg text-zinc-400 text-balance">
-            Pay once with card or crypto. We source the skin from the open market and our bot
-            trades it straight to your Steam account. No listing. No escrow. No waiting.
+            Pay once with card or crypto. Your skin lands in your Steam inventory in minutes.
+            No listing. No escrow. No waiting.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Link href="/market" className="btn-primary px-6 py-3 text-base">
@@ -48,7 +48,7 @@ export default async function HomePage() {
           <div className="mb-6 flex items-end justify-between">
             <div>
               <h2 className="font-display text-2xl font-bold sm:text-3xl">Latest arrivals</h2>
-              <p className="mt-1 text-sm text-zinc-400">Freshly synced from the source marketplace.</p>
+              <p className="mt-1 text-sm text-zinc-400">Latest skins added to our catalog.</p>
             </div>
             <Link
               href="/market"
@@ -89,7 +89,7 @@ export default async function HomePage() {
             {
               n: '03',
               t: 'Get it on Steam',
-              d: 'Our bot sources the item and sends a Steam trade offer to your account in minutes.',
+              d: 'Our bot delivers the skin to your Steam account via trade offer in minutes.',
             },
           ].map((step) => (
             <div key={step.n} className="card card-hover p-6">

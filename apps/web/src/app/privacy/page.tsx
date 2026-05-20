@@ -44,8 +44,8 @@ export default function PrivacyPage() {
           .
         </li>
         <li>
-          <strong>DMarket</strong> (and other licensed marketplaces) — we transmit the offer ID
-          to source the item you bought. We do not share your personal data with them.
+          <strong>Inventory partners</strong> — to fulfil your order, we share the item reference
+          with the partner platform that holds the inventory. We do not share your personal data.
         </li>
         <li>
           <strong>Steam</strong> — by design, since we send the trade offer to your account.

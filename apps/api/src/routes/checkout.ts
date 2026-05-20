@@ -121,14 +121,44 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
     if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
     const { id } = request.params as { id: string };
+    // Explicit select — never expose internal fields like sourceTransactions.provider
+    // (our arbitrage source) or rawRequest/rawResponse to the buyer.
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { items: true, payments: true, trades: true, sourceTransactions: true },
+      select: {
+        id: true,
+        status: true,
+        totalAmountMinor: true,
+        currency: true,
+        createdAt: true,
+        paidAt: true,
+        fulfilledAt: true,
+        buyerId: true,
+        items: {
+          select: { id: true, itemName: true, iconUrl: true, priceMinor: true, currency: true },
+        },
+        payments: {
+          select: {
+            id: true,
+            status: true,
+            provider: true,
+            succeededAt: true,
+          },
+        },
+        trades: {
+          select: { id: true, status: true, sentAt: true, completedAt: true },
+        },
+        sourceTransactions: {
+          select: { id: true, state: true, errorCode: true, succeededAt: true },
+        },
+      },
     });
     if (!order || order.buyerId !== session.sub) {
       return reply.code(404).send({ error: 'not_found' });
     }
-    return { order };
+    // Strip buyerId from the response — the client already knows who they are.
+    const { buyerId: _, ...safe } = order;
+    return { order: safe };
   });
 
   // Paginated list of the authenticated user's orders. Powers /account history
