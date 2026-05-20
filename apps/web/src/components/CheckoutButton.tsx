@@ -46,11 +46,33 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="w-full rounded-md bg-brand px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-neutral-700"
+        className="btn-primary w-full py-3.5 text-base"
       >
-        {pending ? 'Redirecting…' : label}
+        {pending ? (
+          <>
+            <Spinner /> Redirecting…
+          </>
+        ) : (
+          <>
+            {label}
+            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
+            </svg>
+          </>
+        )}
       </button>
-      {error ? <div className="text-sm text-red-400">{error}</div> : null}
+      {error ? (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-sm text-red-300">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 };
+
+const Spinner = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4 animate-spin" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity={0.25} strokeWidth={3} />
+    <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+  </svg>
+);

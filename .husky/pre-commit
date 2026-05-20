@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Pre-commit hook: scan for secrets, lint staged files, typecheck.
+# To skip (use sparingly!), commit with --no-verify.
+
+set -e
+
+node scripts/scan-secrets.mjs
+pnpm exec lint-staged
+pnpm typecheck

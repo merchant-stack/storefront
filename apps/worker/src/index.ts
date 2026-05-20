@@ -14,6 +14,7 @@ import {
 import { dispatchTrade } from './jobs/dispatch-trade.js';
 import { syncDMarket } from './jobs/sync-dmarket.js';
 import { buyAndDispatch } from './jobs/buy-and-dispatch.js';
+import { jobsProcessed, startHealthServer, stopHealthServer } from './health-server.js';
 
 const log = pino({
   transport:
@@ -54,9 +55,18 @@ const buyAndDispatchWorker = new Worker<BuyAndDispatchJobData>(
 );
 
 for (const w of [tradeWorker, dmarketSyncWorker, buyAndDispatchWorker]) {
-  w.on('completed', (job) => log.info({ queue: w.name, jobId: job.id }, 'job completed'));
-  w.on('failed', (job, err) => log.error({ queue: w.name, jobId: job?.id, err }, 'job failed'));
+  w.on('completed', (job) => {
+    log.info({ queue: w.name, jobId: job.id }, 'job completed');
+    jobsProcessed.inc({ queue: w.name, outcome: 'success' });
+  });
+  w.on('failed', (job, err) => {
+    log.error({ queue: w.name, jobId: job?.id, err }, 'job failed');
+    jobsProcessed.inc({ queue: w.name, outcome: 'failed' });
+  });
 }
+
+startHealthServer(env.WORKER_HEALTH_PORT);
+log.info({ port: env.WORKER_HEALTH_PORT }, 'health server listening');
 
 async function scheduleRecurring(): Promise<void> {
   const repeatables = await dmarketSyncQueue.getRepeatableJobs();
@@ -85,6 +95,7 @@ scheduleRecurring().catch((err) => log.error({ err }, 'failed to schedule recurr
 
 const shutdown = async (signal: string): Promise<void> => {
   log.info({ signal }, 'shutdown signal received');
+  await stopHealthServer();
   await Promise.all([
     tradeWorker.close(),
     dmarketSyncWorker.close(),

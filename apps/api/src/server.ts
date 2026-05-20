@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import rawBody from 'fastify-raw-body';
 import { env } from './env.js';
+import { httpRequestDurationSeconds, httpRequestsTotal, registry } from './services/metrics.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerItemRoutes } from './routes/items.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
@@ -130,6 +131,28 @@ export const buildServer = (): FastifyInstance => {
   }
 
   server.get('/health', () => ({ ok: true, service: 'rustskinpay-api' }));
+
+  // Prometheus metrics endpoint. Public path (scrapers can't auth easily) — but
+  // we don't expose anything sensitive: counts + histograms only. Behind WAF /
+  // private network in prod is even better.
+  server.get('/metrics', async (_request, reply) => {
+    reply.header('Content-Type', registry.contentType);
+    return registry.metrics();
+  });
+
+  // Per-request metrics. `routeOptions.url` collapses parameterised paths to
+  // the route template (`/api/items/:id`) so we don't blow up cardinality.
+  server.addHook('onResponse', async (request, reply) => {
+    const route = request.routeOptions?.url ?? 'unknown';
+    if (route === '/metrics' || route === '/health') return;
+    const labels = {
+      method: request.method,
+      route,
+      status: String(reply.statusCode),
+    };
+    httpRequestsTotal.inc(labels);
+    httpRequestDurationSeconds.observe(labels, reply.elapsedTime / 1000);
+  });
 
   void server.register(async (instance) => {
     registerAuthRoutes(instance);

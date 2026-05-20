@@ -41,12 +41,12 @@ export const MockPayPanel = ({ orderId }: Props) => {
   };
 
   return (
-    <div className="mt-6 flex w-full flex-col gap-3">
+    <div className="mt-8 flex w-full flex-col gap-3">
       <button
         type="button"
         onClick={() => void submit('pay')}
         disabled={pending !== null}
-        className="w-full rounded-md bg-brand px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-neutral-700"
+        className="btn-primary w-full py-3 text-base"
       >
         {pending === 'pay' ? 'Processing…' : 'Pay (mock)'}
       </button>
@@ -54,11 +54,15 @@ export const MockPayPanel = ({ orderId }: Props) => {
         type="button"
         onClick={() => void submit('cancel')}
         disabled={pending !== null}
-        className="w-full rounded-md border border-neutral-700 px-4 py-3 text-sm text-neutral-300 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-secondary w-full py-3 text-sm"
       >
         {pending === 'cancel' ? 'Cancelling…' : 'Cancel'}
       </button>
-      {error ? <div className="text-sm text-red-400">{error}</div> : null}
+      {error ? (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] px-3 py-2 text-sm text-red-300">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 };

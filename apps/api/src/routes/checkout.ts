@@ -130,4 +130,46 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
     }
     return { order };
   });
+
+  // Paginated list of the authenticated user's orders. Powers /account history
+  // and the /checkout/success polling page.
+  const listOrdersQuerySchema = z.object({
+    limit: z.coerce.number().int().positive().max(50).default(20),
+    cursor: z.string().optional(),
+  });
+
+  server.get('/api/me/orders', async (request, reply) => {
+    const session = readSession(request);
+    if (!session) return reply.code(401).send({ error: 'not_authenticated' });
+
+    const parse = listOrdersQuerySchema.safeParse(request.query);
+    if (!parse.success) {
+      return reply.code(400).send({ error: 'invalid_query', detail: parse.error.flatten() });
+    }
+    const { limit, cursor } = parse.data;
+
+    const rows = await prisma.order.findMany({
+      where: { buyerId: session.sub },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      include: {
+        items: {
+          select: { id: true, itemName: true, iconUrl: true, priceMinor: true, currency: true },
+        },
+        sourceTransactions: {
+          select: { id: true, state: true, errorCode: true, succeededAt: true },
+        },
+        payments: {
+          select: { id: true, status: true, provider: true, succeededAt: true },
+        },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    const orders = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? (orders[orders.length - 1]?.id ?? null) : null;
+
+    return { orders, nextCursor };
+  });
 };

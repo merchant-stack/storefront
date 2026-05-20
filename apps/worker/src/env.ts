@@ -30,6 +30,7 @@ const schema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(4001),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -16,7 +16,7 @@
     "db:push": "dotenv -e ../../.env.local -- prisma db push",
     "db:seed": "dotenv -e ../../.env.local -- tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'no lint configured yet'"
+    "lint": "eslint src --max-warnings 0"
   },
   "prisma": {
     "seed": "dotenv -e ../../.env.local -- tsx prisma/seed.ts"

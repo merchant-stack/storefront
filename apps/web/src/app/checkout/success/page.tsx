@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { OrderStatusTracker } from '@/components/OrderStatusTracker';
 
 interface SearchParams {
   orderId?: string;
@@ -10,25 +10,32 @@ export default async function CheckoutSuccessPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { orderId } = await searchParams;
+
   return (
-    <main className="mx-auto flex max-w-xl flex-col items-center px-6 py-16 text-center">
-      <div className="mb-4 text-5xl">✓</div>
-      <h1 className="text-2xl font-bold">Payment received</h1>
-      <p className="mt-2 text-neutral-400">
-        We&apos;re dispatching your skin via Steam trade offer. Check your Steam notifications in a
-        minute or two.
-      </p>
-      {orderId ? (
-        <div className="mt-6 rounded-md bg-neutral-900 px-4 py-2 font-mono text-xs text-neutral-500">
-          Order {orderId}
+    <main className="mx-auto max-w-2xl px-6 py-16">
+      <div className="text-center">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">
+          <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+          </svg>
         </div>
-      ) : null}
-      <Link
-        href="/market"
-        className="mt-8 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark"
-      >
-        Continue shopping
-      </Link>
+        <h1 className="mt-5 font-display text-3xl font-bold">Payment received</h1>
+        <p className="mt-2 text-zinc-400">
+          We&apos;re sourcing your skin and dispatching the Steam trade offer.
+        </p>
+      </div>
+
+      {orderId ? (
+        <OrderStatusTracker orderId={orderId} />
+      ) : (
+        <div className="card mt-8 p-6 text-center text-sm text-zinc-400">
+          No order reference in URL. Check your{' '}
+          <a href="/account#orders" className="text-brand hover:underline">
+            order history
+          </a>{' '}
+          for status.
+        </div>
+      )}
     </main>
   );
 }
