@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { env } from '../env.js';
 
 export const SESSION_COOKIE = 'rustskinpay_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
@@ -14,10 +15,14 @@ export const setSessionCookie = (
   isProduction: boolean,
 ): void => {
   const token = reply.server.jwt.sign(payload, { expiresIn: `${SESSION_TTL_SECONDS}s` });
+  // SameSite=None requires Secure=true (Chrome / Safari enforce this since 2020).
+  // We auto-promote secure when SameSite=None even in dev, so a misconfigured
+  // dev setup fails closed rather than silently dropping the cookie.
+  const secure = isProduction || env.SESSION_SAMESITE === 'none';
   reply.setCookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
+    secure,
+    sameSite: env.SESSION_SAMESITE,
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
   });

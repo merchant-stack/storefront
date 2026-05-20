@@ -82,7 +82,7 @@ export const buildServer = (): FastifyInstance => {
   });
 
   void server.register(cors, {
-    origin: env.WEB_ORIGIN,
+    origin: env.ALLOWED_ORIGINS,
     credentials: true,
   });
   void server.register(cookie, { secret: env.COOKIE_SECRET });
@@ -105,13 +105,15 @@ export const buildServer = (): FastifyInstance => {
     if (request.url.startsWith('/api/webhooks/')) return; // signed by provider
     const origin = request.headers.origin;
     const referer = request.headers.referer;
-    const allowed = env.WEB_ORIGIN;
     // If neither origin nor referer is present, refuse (could be curl or
-    // server-side, but state changes must be from our SPA).
-    const ok =
-      (typeof origin === 'string' && origin === allowed) ||
-      (typeof referer === 'string' && referer.startsWith(`${allowed}/`));
-    if (!ok) {
+    // server-side, but state changes must be from our SPA). Accept either an
+    // exact match in the allowed-origins list, or a referer that starts with
+    // any allowed origin.
+    const originOk = typeof origin === 'string' && env.ALLOWED_ORIGINS.includes(origin);
+    const refererOk =
+      typeof referer === 'string' &&
+      env.ALLOWED_ORIGINS.some((o) => referer.startsWith(`${o}/`));
+    if (!originOk && !refererOk) {
       request.log.warn({ origin, referer, url: request.url }, 'csrf: origin mismatch');
       return reply.code(403).send({ error: 'csrf_blocked' });
     }

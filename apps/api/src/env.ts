@@ -17,7 +17,22 @@ const schema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
+  // Public URL of the API itself, used as the OpenID return_to / realm and
+  // anywhere we need to round-trip a redirect through the api. Defaults to
+  // a localhost guess for dev. Set explicitly in prod (e.g.
+  // https://api.rustskinpay.com).
+  API_ORIGIN: z.string().url().default('http://localhost:4000'),
+  // Comma-separated extra origins allowed by CORS and the CSRF origin check.
+  // Use when www.rustskinpay.com and rustskinpay.com both need to talk to api,
+  // or for a Vercel preview deploy URL. WEB_ORIGIN remains the canonical one
+  // used for OAuth redirects and Stripe success/cancel URLs.
+  CORS_EXTRA_ORIGINS: z.string().default(''),
   COOKIE_SECRET: z.string().min(32),
+  // Session cookie SameSite policy. Use 'lax' (default) when web and api share
+  // a registrable domain in prod (e.g. rustskinpay.com + api.rustskinpay.com).
+  // Use 'none' if they are on entirely different domains; browsers require
+  // Secure=true in that case, which we enforce automatically in production.
+  SESSION_SAMESITE: z.enum(['lax', 'none']).default('lax'),
   STEAM_API_KEY: optionalNonEmpty,
   STRIPE_SECRET_KEY: optionalNonEmpty,
   STRIPE_WEBHOOK_SECRET: optionalNonEmpty,
@@ -33,6 +48,21 @@ const schema = z.object({
   // shown on the storefront but can't be purchased yet — we display a
   // "restocking" message. Raise (in cents) as bot balance + ops confidence grows.
   MAX_BUY_PRICE_MINOR: z.coerce.number().int().positive().default(500),
+  // Reject checkout if the SourceItem snapshot is older than this. Prevents
+  // charging the buyer for a listing that's gone stale between sync cycles.
+  // The post-payment refund flow still catches actual buy failures, but this
+  // cuts the failure window meaningfully without hitting Waxpeer per click.
+  MAX_LISTING_AGE_SECONDS: z.coerce.number().int().positive().default(600),
+  // Global kill-switch for the checkout endpoint. When true the site is in
+  // browse-only mode: catalog and Steam sign-in still work, the buy button
+  // shows "Sales launching soon" on the web, and POST /api/checkout returns
+  // 503 with `sales_not_active`. Flip to false once a payment provider is
+  // wired and Dmitriy is ready to accept orders. Must match the web side's
+  // NEXT_PUBLIC_CHECKOUT_DISABLED at deploy time.
+  CHECKOUT_DISABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -41,4 +71,13 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+const extraOrigins = parsed.data.CORS_EXTRA_ORIGINS
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+export const env = {
+  ...parsed.data,
+  /** All origins that CORS and the CSRF origin check should accept. */
+  ALLOWED_ORIGINS: [parsed.data.WEB_ORIGIN, ...extraOrigins],
+};

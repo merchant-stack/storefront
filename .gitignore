@@ -45,3 +45,11 @@ apps/worker/steamguard-*.maFile
 # Coverage
 coverage/
 .nyc_output/
+
+# Competitor legal docs used as reference only — third-party IP, do not ship
+/doc/
+
+# Stray screenshots at repo root
+/*.PNG
+/*.png
+/*.jpg

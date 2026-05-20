@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { fetchMe, logout, steamLoginUrl, type SessionUser } from '@/lib/api';
+import { fetchMe, logout, type SessionUser } from '@/lib/api';
 
 export const Header = () => {
   const pathname = usePathname();
@@ -198,9 +198,9 @@ export const Header = () => {
                 ) : null}
               </div>
             ) : (
-              <a href={steamLoginUrl()} className="btn-primary text-sm">
+              <Link href="/account" className="btn-primary text-sm">
                 <IconSteam /> Sign in
-              </a>
+              </Link>
             )}
 
             {/* Mobile menu toggle */}

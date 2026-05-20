@@ -21,6 +21,12 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
   // Stricter rate limit for checkout: payment flows are higher-cost + higher-
   // abuse-value than reads. 30 attempts/hour per IP is plenty for legitimate use.
   server.post('/api/checkout', { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } }, async (request, reply) => {
+    // Global kill-switch — site can be live in browse-only mode while we wire
+    // up a payment provider. Reject before touching session, DB, or rate limit.
+    if (env.CHECKOUT_DISABLED) {
+      return reply.code(503).send({ error: 'sales_not_active' });
+    }
+
     const session = readSession(request);
     if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
@@ -58,9 +64,20 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
       if (item.salePriceMinor > env.MAX_BUY_PRICE_MINOR) {
         return { error: 'item_temporarily_unavailable' as const };
       }
+      // Staleness guard: a stale snapshot is likely sold or repriced. Better
+      // to ask the buyer to refresh than to send them to Stripe for something
+      // we'll have to refund post-charge.
+      const ageMs = Date.now() - item.lastSyncedAt.getTime();
+      if (ageMs > env.MAX_LISTING_AGE_SECONDS * 1000) {
+        return { error: 'listing_stale' as const };
+      }
 
       const buyer = await tx.user.findUnique({ where: { id: session.sub } });
       if (!buyer) return null;
+      // Hard gate: never let a buyer pay without a trade URL. Otherwise the
+      // order lands in PAID limbo (no dispatch enqueued) until they come back
+      // and set one — bad UX and a fraud / chargeback vector.
+      if (!buyer.tradeUrl) return { error: 'trade_url_required' as const };
 
       const order = await tx.order.create({
         data: {

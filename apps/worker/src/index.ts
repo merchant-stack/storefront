@@ -68,27 +68,59 @@ for (const w of [tradeWorker, dmarketSyncWorker, buyAndDispatchWorker]) {
 startHealthServer(env.WORKER_HEALTH_PORT);
 log.info({ port: env.WORKER_HEALTH_PORT }, 'health server listening');
 
+/**
+ * Set up the repeatable rust-sync job. Wrapped in a Redis SETNX lock so that
+ * during a rolling restart (two worker pods alive briefly), only one rewrites
+ * the repeat schedule. Without the lock the worse-case is a stretch of double
+ * syncs while one of the workers' jobs hadn't yet been removed by the other —
+ * not catastrophic but wasteful and visible in logs as duplicate runs. Lock
+ * TTL is intentionally short so a crashed worker doesn't keep the slot.
+ */
 async function scheduleRecurring(): Promise<void> {
-  const repeatables = await dmarketSyncQueue.getRepeatableJobs();
-  for (const r of repeatables) {
-    await dmarketSyncQueue.removeRepeatableByKey(r.key);
+  const SCHEDULE_LOCK_KEY = 'rustskinpay:worker:schedule-lock';
+  const SCHEDULE_LOCK_TTL_SECONDS = 60;
+  const acquired = await connection.set(
+    SCHEDULE_LOCK_KEY,
+    process.pid.toString(),
+    'EX',
+    SCHEDULE_LOCK_TTL_SECONDS,
+    'NX',
+  );
+  if (acquired !== 'OK') {
+    log.info('another worker holds the schedule lock; skipping repeat-job setup');
+    return;
   }
-  await dmarketSyncQueue.add(
-    'rust-sync',
-    { gameId: 'rust', limit: env.DMARKET_SYNC_LIMIT },
-    {
-      repeat: { every: env.DMARKET_SYNC_INTERVAL_MS },
-      jobId: 'rust-sync-recurring',
-      removeOnComplete: 50,
-      removeOnFail: 50,
-    },
-  );
-  await dmarketSyncQueue.add(
-    'rust-sync-initial',
-    { gameId: 'rust', limit: env.DMARKET_SYNC_LIMIT },
-    { removeOnComplete: true, removeOnFail: 10 },
-  );
-  log.info({ intervalMs: env.DMARKET_SYNC_INTERVAL_MS }, 'dmarket sync scheduled');
+
+  try {
+    const repeatables = await dmarketSyncQueue.getRepeatableJobs();
+    for (const r of repeatables) {
+      await dmarketSyncQueue.removeRepeatableByKey(r.key);
+    }
+    await dmarketSyncQueue.add(
+      'rust-sync',
+      { gameId: 'rust', limit: env.DMARKET_SYNC_LIMIT },
+      {
+        repeat: { every: env.DMARKET_SYNC_INTERVAL_MS },
+        jobId: 'rust-sync-recurring',
+        removeOnComplete: 50,
+        removeOnFail: 50,
+      },
+    );
+    await dmarketSyncQueue.add(
+      'rust-sync-initial',
+      { gameId: 'rust', limit: env.DMARKET_SYNC_LIMIT },
+      { removeOnComplete: true, removeOnFail: 10 },
+    );
+    log.info({ intervalMs: env.DMARKET_SYNC_INTERVAL_MS }, 'dmarket sync scheduled');
+  } finally {
+    // Drop the lock only if we still own it (TTL would clear it anyway on
+    // crash). Best-effort: any failure here is harmless because the TTL is
+    // short enough that the next restart will succeed.
+    const current = await connection.get(SCHEDULE_LOCK_KEY);
+    if (current === process.pid.toString()) {
+      await connection.del(SCHEDULE_LOCK_KEY);
+    }
+  }
 }
 
 scheduleRecurring().catch((err) => log.error({ err }, 'failed to schedule recurring sync'));

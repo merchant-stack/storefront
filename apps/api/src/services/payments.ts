@@ -78,6 +78,7 @@ export interface FinalizeOrderInput {
   orderId: string;
   providerSessionId?: string;
   providerPaymentIntentId?: string;
+  buyerEmail?: string;
 }
 
 /**
@@ -114,6 +115,25 @@ export const finalizeOrderPayment = async (
     });
     if (!order || order.status === 'PAID' || order.status === 'FULFILLED') {
       return false;
+    }
+
+    // Stripe Checkout collects an email from the card; persist it on the
+    // Order if we didn't have one. Also backfill User.email if the buyer
+    // signed in via Steam without one (Steam OpenID doesn't expose email).
+    if (input.buyerEmail) {
+      if (!order.buyerEmail) {
+        await tx.order.update({
+          where: { id: input.orderId },
+          data: { buyerEmail: input.buyerEmail },
+        });
+      }
+      if (order.buyer && !order.buyer.email) {
+        // Best-effort: ignore unique-constraint violation if another user
+        // already claimed this email.
+        await tx.user
+          .update({ where: { id: order.buyer.id }, data: { email: input.buyerEmail } })
+          .catch(() => undefined);
+      }
     }
 
     await tx.order.update({

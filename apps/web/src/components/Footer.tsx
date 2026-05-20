@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LEGAL_ENTITY_ONE_LINE, SUPPORT_EMAIL, SUPPORT_MAILTO } from '@/lib/support';
 
 export const Footer = () => {
   return (
@@ -69,12 +70,18 @@ export const Footer = () => {
                   Refund policy
                 </Link>
               </li>
+              <li>
+                <a href={SUPPORT_MAILTO} className="hover:text-white">
+                  {SUPPORT_EMAIL}
+                </a>
+              </li>
             </ul>
           </nav>
         </div>
 
         <div className="mt-12 border-t border-white/[0.06] pt-8 text-xs text-zinc-500">
           <p>© {new Date().getFullYear()} RustSkinPay. All rights reserved.</p>
+          <p className="mt-1.5 text-zinc-600">{LEGAL_ENTITY_ONE_LINE}</p>
         </div>
       </div>
     </footer>

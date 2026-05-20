@@ -55,13 +55,30 @@ export default function AccountPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-md px-6 py-20 text-center">
-        <h1 className="font-display text-2xl font-bold">Sign in required</h1>
+        <h1 className="font-display text-2xl font-bold">Sign in to RustSkinPay</h1>
         <p className="mt-2 text-zinc-400">
-          Please sign in with Steam to manage your account and view orders.
+          Authentication is via Steam. We never see your Steam password.
         </p>
         <a href={`${API_URL}/auth/steam/login`} className="btn-primary mt-6 inline-flex">
-          Sign in with Steam
+          Continue with Steam
         </a>
+        <p className="mt-5 text-xs leading-relaxed text-zinc-500">
+          By continuing, you confirm that you are at least <strong className="text-zinc-300">18 years old</strong>{' '}
+          (or the age of majority in your country, whichever is higher) and that you accept our{' '}
+          <Link href="/terms" className="text-zinc-300 underline-offset-2 hover:underline">
+            Terms of service
+          </Link>
+          ,{' '}
+          <Link href="/privacy" className="text-zinc-300 underline-offset-2 hover:underline">
+            Privacy policy
+          </Link>
+          , and{' '}
+          <Link href="/refunds" className="text-zinc-300 underline-offset-2 hover:underline">
+            Refund policy
+          </Link>
+          . Once a Skin has been dispatched to your Steam account, the order is treated as
+          fulfilled and is not refundable on grounds of change of mind.
+        </p>
       </main>
     );
   }

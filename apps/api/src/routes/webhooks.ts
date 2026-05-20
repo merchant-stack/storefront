@@ -80,11 +80,14 @@ const handleStripeEvent = async (event: Stripe.Event): Promise<void> => {
       const session = event.data.object;
       const orderId = session.metadata?.orderId;
       if (!orderId) return;
+      const buyerEmail =
+        session.customer_details?.email ?? session.customer_email ?? undefined;
       await finalizeOrderPayment({
         orderId,
         providerSessionId: session.id,
         providerPaymentIntentId:
           typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
+        buyerEmail,
       });
       break;
     }

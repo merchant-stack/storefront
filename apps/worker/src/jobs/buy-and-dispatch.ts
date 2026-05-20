@@ -1,15 +1,16 @@
 // Buy on source + dispatch to buyer.
 //
-// Triggered after Stripe success for a SourceItem-backed order. Flow:
-//   1. Mark SourceTransaction EXECUTING.
-//   2. Call dmarket.buyOffer(sourceOfferId, sourcePriceMinor).
-//   3. On success → SourceTransaction SUCCESS + sourcePaymentId.
-//      Create Trade(QUEUED), enqueue trade-dispatch (existing worker pulls from
-//      bot inventory and sends to buyer).
-//   4. On failure → SourceTransaction FAILED + Order REFUND_REQUIRED. Refund
-//      hookup lives in webhook code; we just transition state here.
+// Two delivery models depending on provider:
+//   - WAXPEER: P2P. We pass the buyer's trade URL to buy-one-p2p; Waxpeer's
+//     seller bot sends the Steam trade offer directly to the buyer. We mark
+//     the Order FULFILLED on a successful API response. No Trade row, no
+//     own-bot dispatch.
+//   - DMARKET (legacy / unused): item is delivered to OUR bot inventory.
+//     We then create a Trade row and enqueue dispatch-trade so our bot
+//     re-sends the item to the buyer.
 //
 // Idempotent: if the SourceTransaction is already SUCCESS we skip the buy.
+// On any buy failure we issue a Stripe refund + transition Order to REFUNDED.
 
 import type { Job } from 'bullmq';
 import pino from 'pino';
@@ -85,7 +86,7 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
     throw new Error(`source buy failed: ${buy.errorCode ?? 'unknown'}`);
   }
 
-  // 3. Buy succeeded — record + hand off to trade dispatch.
+  // 3. Buy succeeded — branch on provider.
   await prisma.sourceTransaction.update({
     where: { id: tx.id },
     data: {
@@ -96,6 +97,35 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
     },
   });
 
+  if (tx.provider === 'WAXPEER') {
+    // P2P delivery: Waxpeer's seller bot sends the Steam trade offer directly
+    // to the buyer's tradeUrl. From our state machine's perspective the order
+    // is fulfilled the moment the source confirms. Buyer acceptance / Steam
+    // escrow holds are between buyer and Steam and are outside our pipeline.
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.trade.create({
+        data: {
+          orderId,
+          botSteamId64: 'WAXPEER_P2P',
+          buyerSteamId64: order.buyerSteamId64,
+          buyerTradeUrl: order.buyer.tradeUrl,
+          status: 'SENT',
+          tradeOfferId: buy.sourcePaymentId ?? null,
+          sentAt: now,
+        },
+      }),
+      prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'FULFILLED', fulfilledAt: now },
+      }),
+    ]);
+    log.info({ orderId, sourcePaymentId: buy.sourcePaymentId }, 'waxpeer p2p delivery dispatched, order fulfilled');
+    return;
+  }
+
+  // DMARKET legacy path: item lands in our bot inventory; dispatch-trade
+  // worker re-sends it to the buyer.
   const trade = await prisma.trade.create({
     data: {
       orderId,

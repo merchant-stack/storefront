@@ -9,7 +9,7 @@ import {
 import { audit } from '../services/audit.js';
 import { clearSessionCookie, readSession, setSessionCookie } from './session.js';
 
-const apiOrigin = (): string => `http://localhost:${env.PORT}`;
+const apiOrigin = (): string => env.API_ORIGIN;
 
 export const registerAuthRoutes = (server: FastifyInstance): void => {
   // Auth endpoints get a tighter rate limit — brute prevention and OpenID

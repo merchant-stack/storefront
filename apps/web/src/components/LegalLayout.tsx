@@ -12,16 +12,8 @@ export const LegalLayout = ({ title, lastUpdated, children }: Props) => (
     {lastUpdated ? (
       <p className="mt-2 text-sm text-zinc-500">Last updated: {lastUpdated}</p>
     ) : null}
-    <article className="prose prose-invert prose-zinc mt-10 max-w-none text-zinc-300 [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-zinc-100 [&_h2]:mt-10 [&_h2]:mb-3 [&_p]:my-4 [&_p]:leading-relaxed [&_a]:text-brand [&_a]:no-underline hover:[&_a]:underline [&_ul]:my-4 [&_ul]:space-y-1 [&_li]:ml-5 [&_li]:list-disc">
+    <article className="prose prose-invert prose-zinc mt-10 max-w-none text-zinc-300 [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-zinc-100 [&_h2]:mt-10 [&_h2]:mb-3 [&_p]:my-4 [&_p]:leading-relaxed [&_a]:text-brand [&_a]:no-underline hover:[&_a]:underline [&_ul]:my-4 [&_ul]:space-y-1 [&_li]:ml-5 [&_li]:list-disc [&_strong]:text-zinc-100">
       {children}
     </article>
   </main>
-);
-
-export const PlaceholderNotice = () => (
-  <div className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 text-sm text-amber-200">
-    <strong className="font-semibold">Draft:</strong> The full text of this policy is being
-    finalised by legal counsel. The summary below describes our current practice; the binding
-    document will appear here before public launch.
-  </div>
 );
