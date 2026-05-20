@@ -12,8 +12,8 @@ export default function RefundsPage() {
       <p>
         If we cannot deliver the skin you purchased — for example because inventory became
         unavailable between checkout and dispatch, or the Steam trade could not be completed —
-        we refund your payment in full, automatically, via Stripe. You don&apos;t need to contact
-        us.
+        we refund your payment in full, automatically, via the same payment method. You
+        don&apos;t need to contact us.
       </p>
 
       <h2>No buyer&apos;s remorse refunds</h2>

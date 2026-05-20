@@ -45,13 +45,18 @@ export default async function MarketPage({
     <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-bold sm:text-4xl">Buy Rust skins</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            {items.length} item{items.length === 1 ? '' : 's'} matching · live inventory
+          <span className="font-mono text-[11px] uppercase tracking-widest text-brand">
+            // Market
+          </span>
+          <h1 className="mt-2 font-display text-4xl font-black tracking-tight sm:text-5xl">
+            Buy Rust skins
+          </h1>
+          <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-zinc-500">
+            {items.length} unit{items.length === 1 ? '' : 's'} matching · live inventory
           </p>
         </div>
         {hasFilters ? (
-          <Link href="/market" className="btn-ghost text-xs text-zinc-400">
+          <Link href="/market" className="btn-ghost font-mono text-[11px] uppercase tracking-widest text-zinc-400">
             Clear filters
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />

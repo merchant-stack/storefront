@@ -24,6 +24,11 @@ const config: Config = {
           900: '#7e2412',
           dark: '#cc4719',
         },
+        neon: {
+          cyan: '#22d3ee',
+          magenta: '#e879f9',
+          lime: '#a3e635',
+        },
         rarity: {
           common: '#9ca3af',
           uncommon: '#22c55e',
@@ -40,7 +45,9 @@ const config: Config = {
       boxShadow: {
         glow: '0 0 30px -8px rgba(255,90,31,0.45)',
         'glow-lg': '0 0 60px -10px rgba(255,90,31,0.55)',
+        'glow-cyan': '0 0 30px -8px rgba(34,211,238,0.45)',
         card: '0 4px 24px -8px rgba(0,0,0,0.5)',
+        'card-hover': '0 12px 40px -12px rgba(255,90,31,0.25), 0 0 0 1px rgba(255,90,31,0.15)',
       },
       backgroundImage: {
         'gradient-radial':
@@ -52,6 +59,9 @@ const config: Config = {
         'pulse-glow': 'pulse-glow 2.5s ease-in-out infinite',
         'fade-in': 'fade-in 0.3s ease-out',
         shimmer: 'shimmer 2s linear infinite',
+        scanline: 'scanline 6s linear infinite',
+        tickerScroll: 'tickerScroll 40s linear infinite',
+        floatY: 'floatY 6s ease-in-out infinite',
       },
       keyframes: {
         'pulse-glow': {
@@ -65,6 +75,18 @@ const config: Config = {
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
+        },
+        scanline: {
+          '0%': { transform: 'translateY(-100%)' },
+          '100%': { transform: 'translateY(100%)' },
+        },
+        tickerScroll: {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
+        floatY: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
         },
       },
     },

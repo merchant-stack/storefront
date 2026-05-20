@@ -26,6 +26,8 @@ export interface DMarketOffer {
   imageUrl: string | undefined;
   type: string | undefined;
   rarity: string | undefined;
+  /** Hex without leading `#`. Picked by the source so the icon sits on a colour palette that complements it. */
+  backgroundColor: string | undefined;
   priceMinor: number; // USD cents
   currency: 'USD';
   raw: unknown;
@@ -71,7 +73,13 @@ interface DMarketRawOffer {
   classId?: string;
   title?: string;
   image?: string;
-  extra?: { categoryPath?: string; type?: string; rarity?: string; nameColor?: string };
+  extra?: {
+    categoryPath?: string;
+    type?: string;
+    rarity?: string;
+    nameColor?: string;
+    backgroundColor?: string;
+  };
   price?: { USD?: string };
   marketHashName?: string;
   game?: string;
@@ -230,6 +238,10 @@ function normaliseOffer(o: DMarketRawOffer): DMarketOffer {
   // DMarket doesn't expose rarity for most Rust offers; nameColor is a rough
   // proxy (green=uncommon, blue=rare, …) but mapping is unreliable, so we leave
   // rarity null unless DMarket gives us an explicit string.
+  // Normalise the background to a 6-char lowercase hex without '#'. Drop
+  // anything that doesn't match so we don't end up injecting CSS injection vectors.
+  const bgRaw = o.extra?.backgroundColor?.trim().toLowerCase().replace(/^#/, '');
+  const backgroundColor = bgRaw && /^[0-9a-f]{3,8}$/.test(bgRaw) ? bgRaw : undefined;
   return {
     offerId: o.itemId ?? '',
     itemId: o.itemId ?? '',
@@ -239,6 +251,7 @@ function normaliseOffer(o: DMarketRawOffer): DMarketOffer {
     imageUrl: o.image,
     type: type ? titleCase(type) : undefined,
     rarity: o.extra?.rarity,
+    backgroundColor,
     priceMinor: Math.round(priceUsd * 100),
     currency: 'USD',
     raw: o,
@@ -277,6 +290,7 @@ function generateMockOffers(gameId: string, limit: number): DMarketOffer[] {
     imageUrl: `https://placehold.co/300x300/2a2a2a/f97316?text=${encodeURIComponent(s.name)}`,
     type: s.type,
     rarity: s.rarity,
+    backgroundColor: undefined,
     priceMinor: s.priceMinor,
     currency: 'USD',
     raw: { mock: true },

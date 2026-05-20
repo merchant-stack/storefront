@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./money": "./src/money.ts",
     "./ids": "./src/ids.ts",
-    "./dmarket": "./src/dmarket.ts"
+    "./dmarket": "./src/dmarket.ts",
+    "./waxpeer": "./src/waxpeer.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

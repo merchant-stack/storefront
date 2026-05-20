@@ -58,7 +58,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ id: s
             </li>
             <li className="flex items-start gap-2">
               <Check />
-              Auto-refund via Stripe if we can&apos;t deliver.
+              Auto-refund if we can&apos;t deliver.
             </li>
           </ul>
         </div>

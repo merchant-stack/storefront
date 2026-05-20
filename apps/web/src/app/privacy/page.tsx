@@ -14,9 +14,9 @@ export default function PrivacyPage() {
         deliver purchased skins we also store the Steam trade URL you provide.
       </p>
       <p>
-        Payment information (card details, billing address) is collected and processed by Stripe.
-        We never see or store your full card number — we only receive a token and event
-        notifications from Stripe.
+        Payment information (card details, billing address) is collected and processed by a
+        licensed third-party payment provider. We never see or store your full card number — we
+        only receive a token and event notifications from the provider.
       </p>
 
       <h2>What we don&apos;t collect</h2>
@@ -29,7 +29,7 @@ export default function PrivacyPage() {
       <h2>How we use it</h2>
       <ul>
         <li>To deliver the skins you purchase (Steam trade offers).</li>
-        <li>To process payments and issue refunds (via Stripe).</li>
+        <li>To process payments and issue refunds.</li>
         <li>To detect and prevent fraud and abuse.</li>
         <li>To respond to your support requests.</li>
       </ul>
@@ -37,11 +37,8 @@ export default function PrivacyPage() {
       <h2>Who we share with</h2>
       <ul>
         <li>
-          <strong>Stripe</strong> — payment processing. Subject to{' '}
-          <a href="https://stripe.com/privacy" target="_blank" rel="noreferrer">
-            Stripe&apos;s privacy policy
-          </a>
-          .
+          <strong>Payment provider</strong> — handles card processing on our behalf. Subject to
+          their own privacy policy.
         </li>
         <li>
           <strong>Inventory partners</strong> — to fulfil your order, we share the item reference

@@ -99,6 +99,7 @@ enum SourceProvider {
   DMARKET
   SKINPORT
   LIS_SKINS
+  WAXPEER
 }
 
 /// Items we offer for sale on the storefront, sourced from external marketplaces.
@@ -116,12 +117,13 @@ model SourceItem {
   iconUrl          String?
   type             String?
   rarity           String?
-  sourcePriceMinor Int // what we'd pay on the source
-  salePriceMinor   Int // what we charge the buyer (= source + markup)
-  markupBps        Int // basis points; 1500 = 15%
-  currency         String         @default("USD")
-  available        Boolean        @default(true)
-  rawPayload       Json?
+  sourcePriceMinor    Int
+  salePriceMinor      Int
+  markupBps           Int
+  currency            String         @default("USD")
+  available           Boolean        @default(true)
+  iconBackgroundColor String? // hex (no #), e.g. "3f4859" — used as display plate behind iconUrl
+  rawPayload          Json?
   lastSyncedAt     DateTime       @default(now())
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt

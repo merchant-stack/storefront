@@ -15,6 +15,7 @@ import type { Job } from 'bullmq';
 import pino from 'pino';
 import { prisma } from '@rustskinpay/db';
 import { dmarket } from '../dmarket-client.js';
+import { waxpeer } from '../waxpeer-client.js';
 import { tradeDispatchQueue } from '../queue.js';
 import { refundOrder } from '../refund.js';
 
@@ -59,10 +60,13 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
     });
   }
 
-  // 2. Buy on source.
-  log.info({ orderId, sourceOfferId: tx.sourceOfferId, mock: dmarket.isMock() }, 'buying on source');
+  // 2. Buy on source — route to the provider that listed the item.
+  log.info({ orderId, provider: tx.provider, sourceOfferId: tx.sourceOfferId }, 'buying on source');
   const expectedPriceMinor = tx.amountSpentMinor ?? 0;
-  const buy = await dmarket.buyOffer(tx.sourceOfferId, expectedPriceMinor);
+  const buy =
+    tx.provider === 'WAXPEER'
+      ? await waxpeer.buyOffer(tx.sourceOfferId, expectedPriceMinor, order.buyer.tradeUrl)
+      : await dmarket.buyOffer(tx.sourceOfferId, expectedPriceMinor);
 
   if (!buy.success) {
     log.error({ orderId, errorCode: buy.errorCode, errorMessage: buy.errorMessage }, 'source buy failed');

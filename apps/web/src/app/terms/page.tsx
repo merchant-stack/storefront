@@ -24,15 +24,15 @@ export default function TermsPage() {
 
       <h2>Payments and pricing</h2>
       <p>
-        Prices are shown in USD and are final at checkout. Payment is processed by Stripe. We do
-        not store your card details.
+        Prices are shown in USD and are final at checkout. Payments are processed by a licensed
+        third-party payment provider. We do not store your card details.
       </p>
 
       <h2>Delivery</h2>
       <p>
         We aim to deliver within minutes of payment confirmation. Steam-imposed trade holds (up
         to 15 days without Mobile Authenticator) are outside our control. If we cannot deliver,
-        we automatically refund you in full via Stripe — see the refund policy.
+        we automatically refund you in full — see the refund policy.
       </p>
 
       <h2>Prohibited use</h2>

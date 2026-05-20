@@ -5,6 +5,8 @@ export interface ItemDTO {
   displayName: string;
   marketHashName: string;
   iconUrl: string | null;
+  /** Hex without leading `#`. May be null if the source didn't supply one. */
+  iconBackgroundColor: string | null;
   type: string | null;
   rarity: string | null;
   salePriceMinor: number;

@@ -23,6 +23,7 @@ const schema = z.object({
   DMARKET_SECRET_KEY: optionalNonEmpty,
   DMARKET_BASE_URL: z.string().url().default('https://api.dmarket.com'),
   DMARKET_DEFAULT_MARKUP_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
+  WAXPEER_API_KEY: optionalNonEmpty,
   DMARKET_SYNC_LIMIT: z.coerce.number().int().positive().default(60),
   DMARKET_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   STRIPE_SECRET_KEY: optionalNonEmpty,
