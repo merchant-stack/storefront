@@ -15,6 +15,11 @@ const listQuerySchema = z.object({
   sort: z.enum(['price_asc', 'price_desc', 'newest']).default('newest'),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().positive().max(60).default(24),
+  /** When 'true', cap results at MAX_BUY_PRICE_MINOR. Used by landing surfaces. */
+  purchasableOnly: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 export const registerItemRoutes = (server: FastifyInstance): void => {
@@ -26,10 +31,13 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
     const q = parse.data;
 
     const where: Prisma.SourceItemWhereInput = { available: true };
-    if (q.priceMin !== undefined || q.priceMax !== undefined) {
+    const effectiveMax = q.purchasableOnly
+      ? Math.min(q.priceMax ?? Number.MAX_SAFE_INTEGER, env.MAX_BUY_PRICE_MINOR)
+      : q.priceMax;
+    if (q.priceMin !== undefined || effectiveMax !== undefined) {
       where.salePriceMinor = {
         ...(q.priceMin !== undefined ? { gte: q.priceMin } : {}),
-        ...(q.priceMax !== undefined ? { lte: q.priceMax } : {}),
+        ...(effectiveMax !== undefined ? { lte: effectiveMax } : {}),
       };
     }
     if (q.q) where.displayName = { contains: q.q, mode: 'insensitive' };
@@ -43,10 +51,14 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
           ? { salePriceMinor: 'desc' }
           : { lastSyncedAt: 'desc' };
 
+    // Dedup by displayName — Waxpeer often returns N listings of the same skin
+    // at slightly different prices. Showing the same Orange Longsleeve five
+    // times on the storefront is noise; one representative is enough.
     const rows = await prisma.sourceItem.findMany({
       where,
       orderBy,
       take: q.limit + 1,
+      distinct: ['marketHashName'],
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
       select: {
         id: true,

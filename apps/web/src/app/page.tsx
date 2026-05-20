@@ -6,9 +6,11 @@ import { formatPrice } from '@/lib/format';
 import { rarityClasses } from '@/lib/rarity';
 
 export default async function HomePage() {
+  // Landing surfaces only show purchasable items — anything beyond our
+  // fulfilment ceiling would just confuse a buyer landing here cold.
   const [{ items: featured }, { items: hero }, facets] = await Promise.all([
-    getItems({ sort: 'newest', limit: 12 }),
-    getItems({ sort: 'price_desc', limit: 1 }),
+    getItems({ sort: 'newest', limit: 12, purchasableOnly: true }),
+    getItems({ sort: 'price_desc', limit: 1, purchasableOnly: true }),
     getFacets(),
   ]);
 
@@ -17,10 +19,12 @@ export default async function HomePage() {
   const topCategories = facets.types.slice(0, 4);
   const categoryReps = await Promise.all(
     topCategories.map(async (t) => {
-      const r = await getItems({ type: t.value, limit: 1 });
+      const r = await getItems({ type: t.value, limit: 1, purchasableOnly: true });
       return { label: t.value, count: t.count, representative: r.items[0] };
     }),
   );
+  // Drop categories that have no purchasable items so we don't render empty tiles.
+  const visibleCategories = categoryReps.filter((c) => c.representative);
 
   return (
     <main className="relative">
@@ -98,14 +102,14 @@ export default async function HomePage() {
       </section>
 
       {/* ===================== CATEGORIES ===================== */}
-      {categoryReps.length > 0 ? (
+      {visibleCategories.length > 0 ? (
         <section className="mx-auto max-w-7xl px-6 pb-16 sm:pb-20">
           <div className="mb-6">
             <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
               Shop by category
             </h2>
           </div>
-          <CategoryTiles tiles={categoryReps} />
+          <CategoryTiles tiles={visibleCategories} />
         </section>
       ) : null}
 

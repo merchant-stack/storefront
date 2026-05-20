@@ -22,6 +22,7 @@ export default async function MarketPage({
       type: params.type,
       rarity: params.rarity,
       limit: 60,
+      purchasableOnly: true,
     }),
     getFacets(),
   ]);

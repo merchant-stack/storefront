@@ -29,6 +29,8 @@ export interface ItemsFilters {
   sort?: 'newest' | 'price_asc' | 'price_desc';
   cursor?: string;
   limit?: number;
+  /** When true, results are capped at the server-side fulfilment ceiling. */
+  purchasableOnly?: boolean;
 }
 
 const buildQuery = (filters: ItemsFilters): string => {
