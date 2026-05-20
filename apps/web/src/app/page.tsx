@@ -9,6 +9,7 @@ export default async function HomePage() {
     <main className="mx-auto max-w-7xl px-6">
       {/* Hero */}
       <section className="relative pt-16 pb-20 sm:pt-24 sm:pb-28">
+        <div className="bg-grid pointer-events-none absolute inset-0 -z-10" />
         <div className="absolute left-1/2 top-0 -z-10 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-brand/10 blur-[120px]" />
         <div className="mx-auto max-w-3xl text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-1.5 text-xs font-medium text-zinc-300">

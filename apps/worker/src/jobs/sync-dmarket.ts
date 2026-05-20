@@ -1,11 +1,10 @@
-// Periodic sync: fetch top Rust offers from DMarket and upsert into SourceItem.
+// Periodic sync: fetch Rust offers across multiple price bands and upsert into
+// SourceItem. Sampling by price tier gives the storefront a more representative
+// mix (cheap clothing → mid-range armour → expensive weapons), instead of the
+// 60 cheapest items returned by a single ascending sort.
 //
-// One job per tick. Items in the fetched batch are upserted (price + availability
-// refreshed); items previously seen but absent from this batch are marked
-// available=false so the storefront stops showing them.
-//
-// In mock mode (no DMarket keys), the shared client returns deterministic fake
-// offers so the UI still has data.
+// Items previously seen but absent from this batch are marked available=false
+// so the storefront stops showing them.
 
 import type { Job } from 'bullmq';
 import pino from 'pino';
@@ -18,8 +17,18 @@ const log = pino({ name: 'sync-dmarket' });
 
 export interface SyncDMarketJob {
   gameId?: string;
+  /** Optional override; ignored when bands are used. */
   limit?: number;
 }
+
+// Price bands in USD cents. Each band requests its own batch from DMarket; total
+// catalog size = sum of band limits (subject to dedup if DMarket returns overlap).
+const PRICE_BANDS: Array<{ priceFrom: number; priceTo?: number; limit: number; label: string }> = [
+  { priceFrom: 50, priceTo: 1000, limit: 50, label: '$0.50–$10' },
+  { priceFrom: 1000, priceTo: 5000, limit: 60, label: '$10–$50' },
+  { priceFrom: 5000, priceTo: 20000, limit: 50, label: '$50–$200' },
+  { priceFrom: 20000, limit: 30, label: '$200+' },
+];
 
 export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   fetched: number;
@@ -27,23 +36,43 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   retired: number;
 }> {
   const gameId = job.data.gameId ?? 'rust';
-  const limit = job.data.limit ?? env.DMARKET_SYNC_LIMIT;
   const markupBps = env.DMARKET_DEFAULT_MARKUP_BPS;
   const startedAt = new Date();
 
-  log.info({ gameId, limit, mock: dmarket.isMock() }, 'sync starting');
+  log.info({ gameId, mock: dmarket.isMock(), bands: PRICE_BANDS.length }, 'sync starting');
 
-  const offers = await dmarket.searchItems({ gameId, limit });
+  // Fetch each band in series so we don't slam DMarket. Concurrency=1 keeps the
+  // rate-limit footprint predictable; total sync still completes in <10s.
+  const allOffers: DMarketOffer[] = [];
+  for (const band of PRICE_BANDS) {
+    try {
+      const offers = await dmarket.searchItems({
+        gameId,
+        limit: band.limit,
+        priceFrom: band.priceFrom,
+        priceTo: band.priceTo,
+      });
+      log.info({ band: band.label, count: offers.length }, 'band fetched');
+      allOffers.push(...offers);
+    } catch (err) {
+      log.error({ band: band.label, err }, 'band fetch failed');
+    }
+  }
 
-  // Skip offers with no usable price; DMarket occasionally returns 0-priced rows.
-  const usable = offers.filter((o) => o.priceMinor > 0 && o.offerId);
+  // Skip offers with no usable price + dedup by offerId (price bands can overlap
+  // on DMarket's side if priceFrom rounding catches the same offer twice).
+  const seen = new Set<string>();
+  const usable = allOffers.filter((o) => {
+    if (!o.offerId || o.priceMinor <= 0) return false;
+    if (seen.has(o.offerId)) return false;
+    seen.add(o.offerId);
+    return true;
+  });
 
   for (const offer of usable) {
     await upsertOffer(offer, gameId, markupBps);
   }
 
-  // Retire stale: rows in this provider+gameId that weren't in this batch
-  // and weren't already retired.
   const fetchedIds = usable.map((o) => o.offerId);
   const retired = await prisma.sourceItem.updateMany({
     where: {
@@ -58,7 +87,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   log.info(
     {
       gameId,
-      fetched: offers.length,
+      fetched: allOffers.length,
       usable: usable.length,
       retired: retired.count,
       durationMs: Date.now() - startedAt.getTime(),
@@ -66,7 +95,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
     'sync complete',
   );
 
-  return { fetched: offers.length, upserted: usable.length, retired: retired.count };
+  return { fetched: allOffers.length, upserted: usable.length, retired: retired.count };
 }
 
 async function upsertOffer(

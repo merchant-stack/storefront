@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { fetchOrder, type OrderStatus, type OrderSummary, type SourceTransactionState } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
+import { StatusTrackerSkeleton } from '@/components/Skeleton';
 
 interface Props {
   orderId: string;
@@ -55,7 +56,7 @@ export const OrderStatusTracker = ({ orderId }: Props) => {
   }, [orderId]);
 
   if (!loaded) {
-    return <div className="card mt-8 animate-pulse p-6 text-center text-zinc-500">Loading…</div>;
+    return <StatusTrackerSkeleton />;
   }
   if (!order) {
     return (

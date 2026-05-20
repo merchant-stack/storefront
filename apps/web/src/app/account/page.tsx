@@ -11,6 +11,7 @@ import {
   type OrderStatus,
 } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
+import { OrderRowSkeleton } from '@/components/Skeleton';
 
 const STATUS_STYLE: Record<OrderStatus, { label: string; cls: string }> = {
   PENDING_PAYMENT: { label: 'Awaiting payment', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
@@ -180,7 +181,11 @@ export default function AccountPage() {
         </div>
 
         {!ordersLoaded ? (
-          <div className="card mt-4 animate-pulse p-6 text-center text-zinc-500">Loading…</div>
+          <ol className="mt-4 space-y-3">
+            {[0, 1, 2].map((i) => (
+              <OrderRowSkeleton key={i} />
+            ))}
+          </ol>
         ) : orders.length === 0 ? (
           <div className="card mt-4 p-8 text-center">
             <p className="text-zinc-400">You haven&apos;t made any purchases yet.</p>
