@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: typecheck + test + audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm --filter @rustskinpay/db exec prisma generate
+        env:
+          # prisma generate doesn't need a real DB; placeholder satisfies the schema's runtime adapter assertion.
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: pnpm audit (prod, high+)
+        # Soft-fail: known transitive vulns in steamcommunity (request, lodash.pick) are
+        # abandoned upstream. We track them in PLAN.md § 9. Audit is informational here;
+        # remove `|| true` once Steam libs are replaced or vendored.
+        run: pnpm audit --prod --audit-level high || true

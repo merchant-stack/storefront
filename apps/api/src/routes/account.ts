@@ -2,32 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '@rustskinpay/db';
 import { readSession } from '../auth/session.js';
+import { parseTradeUrlSteamId64 } from '../auth/steam-id.js';
 import { audit } from '../services/audit.js';
-
-// Steam SteamID64 = SteamID3 + this base offset (universe=public, type=individual).
-const STEAMID_BASE = 76561197960265728n;
-
-/**
- * Trade URL format: https://steamcommunity.com/tradeoffer/new/?partner=<SteamID3>&token=<token>
- * The "partner" param is the Steam Account ID (SteamID3 = SteamID64 - 76561197960265728).
- * Returning the candidate SteamID64 lets the caller match it against the session.
- */
-function parseTradeUrlSteamId64(tradeUrl: string): string | null {
-  try {
-    const u = new URL(tradeUrl);
-    if (u.hostname !== 'steamcommunity.com') return null;
-    if (u.pathname !== '/tradeoffer/new/') return null;
-    const partner = u.searchParams.get('partner');
-    const token = u.searchParams.get('token');
-    if (!partner || !token) return null;
-    if (!/^\d+$/.test(partner)) return null;
-    if (!/^[A-Za-z0-9_-]+$/.test(token)) return null;
-    const steamId3 = BigInt(partner);
-    return (steamId3 + STEAMID_BASE).toString();
-  } catch {
-    return null;
-  }
-}
 
 const tradeUrlSchema = z.object({
   tradeUrl: z.string().url(),

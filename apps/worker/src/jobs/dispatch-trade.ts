@@ -31,12 +31,7 @@ export const dispatchTrade = async (job: Job<TradeDispatchJob>): Promise<void> =
     include: {
       order: {
         include: {
-          items: {
-            include: {
-              listing: { include: { steamItem: true } },
-              sourceItem: true,
-            },
-          },
+          items: { include: { sourceItem: true } },
         },
       },
     },
@@ -80,10 +75,7 @@ export const dispatchTrade = async (job: Job<TradeDispatchJob>): Promise<void> =
 
   const used = new Set<string>();
   for (const orderItem of trade.order.items) {
-    const wantedName =
-      orderItem.sourceItem?.marketHashName ??
-      orderItem.listing?.steamItem.marketHashName ??
-      orderItem.itemName;
+    const wantedName = orderItem.sourceItem?.marketHashName ?? orderItem.itemName;
     const match = inventory.find(
       (i) => i.market_hash_name === wantedName && !used.has(String(i.assetid)),
     );

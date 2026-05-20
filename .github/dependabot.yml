@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # Group all minor/patch bumps into one PR per week — reviews are cheaper.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Steam libs are tracked manually due to TOS/version-pinning concerns;
+      # bumping these without testing risks breaking the bot in subtle ways.
+      - dependency-name: steam-user
+      - dependency-name: steamcommunity
+      - dependency-name: steam-tradeoffer-manager
+      - dependency-name: steam-totp
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

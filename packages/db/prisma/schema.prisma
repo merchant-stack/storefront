@@ -36,10 +36,8 @@ model User {
   updatedAt   DateTime  @updatedAt
   lastLoginAt DateTime?
 
-  inventoryItems InventoryItem[]
-  listings       Listing[]       @relation("seller")
-  orders         Order[]         @relation("buyer")
-  auditLogs      AuditLog[]
+  orders    Order[]    @relation("buyer")
+  auditLogs AuditLog[]
 
   @@index([steamId64])
 }
@@ -63,33 +61,12 @@ model SteamItem {
   lastSyncedAt   DateTime @default(now())
   createdAt      DateTime @default(now())
 
-  inventoryItems InventoryItem[]
-  listings       Listing[]
   priceSnapshots PriceSnapshot[]
   sourceItems    SourceItem[]
 
   @@unique([appId, classId, instanceId])
   @@unique([appId, marketHashName])
   @@index([appId, type])
-}
-
-model InventoryItem {
-  id            String    @id @default(cuid())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  steamItemId   String
-  steamItem     SteamItem @relation(fields: [steamItemId], references: [id])
-  assetId       String // Steam's per-instance asset id (unique per Steam inventory)
-  tradable      Boolean   @default(true)
-  tradableAfter DateTime?
-  lastSyncedAt  DateTime  @default(now())
-  createdAt     DateTime  @default(now())
-
-  listing Listing?
-
-  @@unique([userId, assetId])
-  @@index([userId])
-  @@index([steamItemId])
 }
 
 model PriceSnapshot {
@@ -193,43 +170,6 @@ model SourceTransaction {
 }
 
 // =========================================================================
-// Marketplace listings (LEGACY — to be removed post-pivot. Kept temporarily so
-// existing API routes compile while they get refactored to read SourceItem.)
-// =========================================================================
-
-enum ListingStatus {
-  ACTIVE
-  RESERVED
-  SOLD
-  CANCELLED
-  EXPIRED
-}
-
-model Listing {
-  id              String        @id @default(cuid())
-  sellerId        String
-  seller          User          @relation("seller", fields: [sellerId], references: [id])
-  inventoryItemId String        @unique
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  steamItemId     String // denormalized for cheaper queries
-  steamItem       SteamItem     @relation(fields: [steamItemId], references: [id])
-  priceMinor      Int
-  currency        String        @default("USD")
-  status          ListingStatus @default(ACTIVE)
-  reservedAt      DateTime?
-  soldAt          DateTime?
-  expiresAt       DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  orderItems OrderItem[]
-
-  @@index([status, steamItemId])
-  @@index([sellerId, status])
-  @@index([status, priceMinor])
-}
-
-// =========================================================================
 // Merchants (Phase 1: a single internal merchant. Phase 3: many.)
 // =========================================================================
 
@@ -299,22 +239,19 @@ model Order {
 }
 
 model OrderItem {
-  id            String      @id @default(cuid())
-  orderId       String
-  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  listingId     String? // LEGACY — kept while marketplace code is migrated
-  listing       Listing?    @relation(fields: [listingId], references: [id])
-  sourceItemId  String? // new: which SourceItem the buyer chose
-  sourceItem    SourceItem? @relation(fields: [sourceItemId], references: [id])
+  id           String      @id @default(cuid())
+  orderId      String
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sourceItemId String?
+  sourceItem   SourceItem? @relation(fields: [sourceItemId], references: [id])
   // Snapshot fields — captured at order time so price/name don't drift
-  itemName      String
-  iconUrl       String?
-  priceMinor    Int
-  currency      String      @default("USD")
-  createdAt     DateTime    @default(now())
+  itemName   String
+  iconUrl    String?
+  priceMinor Int
+  currency   String   @default("USD")
+  createdAt  DateTime @default(now())
 
   @@index([orderId])
-  @@index([listingId])
   @@index([sourceItemId])
 }
 
