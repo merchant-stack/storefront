@@ -47,9 +47,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
 
-# Prisma client needs to be generated against the schema. This is offline
-# (no DB connection required) but must happen after the schema is in place.
-RUN pnpm --filter @rustskinpay/db exec prisma generate
+# Prisma client needs to be generated against the schema. The schema's
+# runtime adapter asserts DATABASE_URL even during generate, so we feed
+# it a placeholder URL (no DB connection happens).
+RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder \
+    pnpm --filter @rustskinpay/db exec prisma generate
 
 # API source.
 COPY apps/api ./apps/api

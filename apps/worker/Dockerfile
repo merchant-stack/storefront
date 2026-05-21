@@ -37,7 +37,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
 
-RUN pnpm --filter @rustskinpay/db exec prisma generate
+RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder \
+    pnpm --filter @rustskinpay/db exec prisma generate
 
 COPY apps/worker ./apps/worker
 
