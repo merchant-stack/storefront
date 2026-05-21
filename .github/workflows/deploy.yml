@@ -119,5 +119,8 @@ jobs:
             echo "IMAGE_TAG=${{ needs.build.outputs.image_tag }}" > .env
             docker compose pull
             docker compose up -d --remove-orphans
+            # Caddyfile is bind-mounted; compose won't restart caddy when its
+            # contents change, so explicitly reload (no downtime).
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || docker compose restart caddy
             docker image prune -f
             docker compose ps
