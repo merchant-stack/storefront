@@ -9,8 +9,8 @@ export default function TermsPage() {
     <LegalLayout title="Terms of service" lastUpdated="2026-05-20">
       <h2>1. Who we are</h2>
       <p>
-        RustSkinPay (the &quot;Service&quot;, &quot;we&quot;, &quot;us&quot;, or
-        &quot;RustSkinPay&quot;) is operated by <strong>{LEGAL_ENTITY.name}</strong>,{' '}
+        RustSupply (the &quot;Service&quot;, &quot;we&quot;, &quot;us&quot;, or
+        &quot;RustSupply&quot;) is operated by <strong>{LEGAL_ENTITY.name}</strong>,{' '}
         {LEGAL_ENTITY.registrationLabel} {LEGAL_ENTITY.registrationNumber}, with registered
         address at {LEGAL_ENTITY.address.line1}, {LEGAL_ENTITY.address.district},{' '}
         {LEGAL_ENTITY.address.city}, {LEGAL_ENTITY.address.country}. References to
@@ -28,7 +28,7 @@ export default function TermsPage() {
 
       <h2>2. What the Service does</h2>
       <p>
-        RustSkinPay is a direct online seller of in-game cosmetic items (&quot;Skins&quot;) for
+        RustSupply is a direct online seller of in-game cosmetic items (&quot;Skins&quot;) for
         the video game Rust, published by Facepunch Studios and distributed via Valve&apos;s
         Steam platform. We acquire Skins from licensed third-party inventory partners and
         dispatch them to your Steam account by way of a Steam trade offer initiated against the
@@ -36,7 +36,7 @@ export default function TermsPage() {
       </p>
       <p>
         We are <strong>not</strong> a marketplace: every Skin sold via the Service is sold
-        directly by RustSkinPay, not by a third-party seller. We are <strong>not</strong>{' '}
+        directly by RustSupply, not by a third-party seller. We are <strong>not</strong>{' '}
         affiliated with Valve Corporation, Facepunch Studios, or any inventory partner.
         Reference to such third-party names is made solely for the purpose of describing the
         nature of the Skins and the channels through which they are delivered.
@@ -251,7 +251,7 @@ export default function TermsPage() {
 
       <h2>11. Intellectual property</h2>
       <p>
-        The Service — including its design, code, copy, and the &quot;RustSkinPay&quot; name
+        The Service — including its design, code, copy, and the &quot;RustSupply&quot; name
         and logo — is the property of {LEGAL_ENTITY.name}. Skin names, in-game images, and
         brand references displayed on the Service belong to their respective rights-holders
         (Valve Corporation, Facepunch Studios, and item creators where applicable) and are

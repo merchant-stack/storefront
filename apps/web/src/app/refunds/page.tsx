@@ -9,7 +9,7 @@ export default function RefundsPage() {
     <LegalLayout title="Refund policy" lastUpdated="2026-05-20">
       <h2>1. What this policy covers</h2>
       <p>
-        This policy describes when and how RustSkinPay (operated by{' '}
+        This policy describes when and how RustSupply (operated by{' '}
         <strong>{LEGAL_ENTITY.name}</strong>) issues refunds. It is part of, and should be
         read together with, our{' '}
         <a href="/terms">Terms of service</a>. Nothing in this policy limits any

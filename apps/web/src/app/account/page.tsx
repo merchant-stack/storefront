@@ -55,7 +55,7 @@ export default function AccountPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-md px-6 py-20 text-center">
-        <h1 className="font-display text-2xl font-bold">Sign in to RustSkinPay</h1>
+        <h1 className="font-display text-2xl font-bold">Sign in to RustSupply</h1>
         <p className="mt-2 text-zinc-400">
           Authentication is via Steam. We never see your Steam password.
         </p>

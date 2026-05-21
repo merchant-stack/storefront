@@ -32,7 +32,7 @@ export const CookieBanner = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-zinc-300">
           We use essential cookies to keep you signed in and process payments. By using
-          RustSkinPay you agree to our{' '}
+          RustSupply you agree to our{' '}
           <Link href="/privacy" className="text-brand hover:underline">
             privacy policy
           </Link>

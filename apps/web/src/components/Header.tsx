@@ -82,11 +82,11 @@ export const Header = () => {
       >
         <div className="mx-auto flex h-[68px] max-w-7xl items-center gap-8 px-6">
           {/* Brand */}
-          <Link href="/" className="group flex items-center gap-3" aria-label="RustSkinPay home">
+          <Link href="/" className="group flex items-center gap-3" aria-label="RustSupply home">
             <span className="font-display text-[19px] font-bold tracking-tight text-zinc-50">
-              rustskin
+              rust
               <span className="bg-gradient-to-r from-brand-400 via-brand to-brand-600 bg-clip-text text-transparent">
-                pay
+                supply
               </span>
               <span className="ml-0.5 inline-block h-1.5 w-1.5 -translate-y-2 rounded-full bg-brand shadow-glow transition-all group-hover:scale-125" />
             </span>

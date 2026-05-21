@@ -83,7 +83,7 @@ jobs:
             ghcr.io/merchant-stack/storefront-web:latest
             ghcr.io/merchant-stack/storefront-web:${{ steps.tag.outputs.tag }}
           build-args: |
-            NEXT_PUBLIC_API_URL=https://api.rustskinpay.com
+            NEXT_PUBLIC_API_URL=https://api.rustsupply.com
             NEXT_PUBLIC_CHECKOUT_DISABLED=true
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max

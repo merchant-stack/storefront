@@ -9,7 +9,7 @@ export default function PrivacyPage() {
     <LegalLayout title="Privacy policy" lastUpdated="2026-05-20">
       <h2>1. Data controller</h2>
       <p>
-        The controller of personal data processed in connection with the RustSkinPay service
+        The controller of personal data processed in connection with the RustSupply service
         (the &quot;Service&quot;) is <strong>{LEGAL_ENTITY.name}</strong>,{' '}
         {LEGAL_ENTITY.registrationLabel} {LEGAL_ENTITY.registrationNumber}, registered at{' '}
         {LEGAL_ENTITY.address.line1}, {LEGAL_ENTITY.address.district},{' '}

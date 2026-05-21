@@ -1,8 +1,8 @@
-# Caddy reverse proxy for api.rustskinpay.com.
+# Caddy reverse proxy for api.rustsupply.com.
 # Auto-provisions a Let's Encrypt cert on first boot — make sure the DNS A record
 # already points at this server's IP, otherwise the ACME challenge will fail.
 
-api.rustskinpay.com {
+api.rustsupply.com {
 	encode zstd gzip
 	reverse_proxy api:4000
 
@@ -24,11 +24,11 @@ api.rustskinpay.com {
 # Web frontend — apex + www. Next.js handles its own security headers
 # (CSP, X-Frame-Options, etc.) via next.config.mjs; Caddy just adds HSTS
 # at the edge.
-www.rustskinpay.com {
-	redir https://rustskinpay.com{uri} permanent
+www.rustsupply.com {
+	redir https://rustsupply.com{uri} permanent
 }
 
-rustskinpay.com {
+rustsupply.com {
 	encode zstd gzip
 	reverse_proxy web:3000
 

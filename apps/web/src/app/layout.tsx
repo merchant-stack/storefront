@@ -26,14 +26,14 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'RustSkinPay — Buy Rust skins, instant Steam delivery',
-    template: '%s — RustSkinPay',
+    default: 'RustSupply — Buy Rust skins, instant Steam delivery',
+    template: '%s — RustSupply',
   },
   description:
     'Buy Rust skins with instant Steam delivery. Pay once — we handle the rest. No listing, no escrow, no waiting.',
-  metadataBase: new URL('https://rustskinpay.com'),
+  metadataBase: new URL('https://rustsupply.com'),
   openGraph: {
-    title: 'RustSkinPay',
+    title: 'RustSupply',
     description: 'Buy Rust skins with instant Steam delivery.',
     type: 'website',
   },

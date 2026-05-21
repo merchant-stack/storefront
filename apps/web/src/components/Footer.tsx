@@ -80,7 +80,7 @@ export const Footer = () => {
         </div>
 
         <div className="mt-12 border-t border-white/[0.06] pt-8 text-xs text-zinc-500">
-          <p>© {new Date().getFullYear()} RustSkinPay. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} RustSupply. All rights reserved.</p>
           <p className="mt-1.5 text-zinc-600">{LEGAL_ENTITY_ONE_LINE}</p>
         </div>
       </div>
