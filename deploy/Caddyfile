@@ -1,0 +1,22 @@
+# Caddy reverse proxy for api.rustskinpay.com.
+# Auto-provisions a Let's Encrypt cert on first boot — make sure the DNS A record
+# already points at this server's IP, otherwise the ACME challenge will fail.
+
+api.rustskinpay.com {
+	encode zstd gzip
+	reverse_proxy api:4000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}

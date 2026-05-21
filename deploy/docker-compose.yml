@@ -1,0 +1,63 @@
+# Production stack for the Aeza VPS.
+#
+# Lives at /opt/rustskinpay/docker-compose.yml on the server.
+# Images are pulled from GHCR — built and pushed by .github/workflows/deploy.yml.
+#
+# Local config files expected next to this one:
+#   Caddyfile     -- reverse proxy + TLS
+#   api.env       -- copy from api.env.example and fill in
+#   worker.env    -- copy from worker.env.example and fill in
+#   .env          -- written by the GitHub Actions deploy step: IMAGE_TAG=sha-xxxxxxxx
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - rustskinpay
+
+  api:
+    image: ghcr.io/rustskinpay/rustskinpay-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./api.env
+    expose:
+      - '4000'
+    networks:
+      - rustskinpay
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:4000/health']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    image: ghcr.io/rustskinpay/rustskinpay-worker:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./worker.env
+    networks:
+      - rustskinpay
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:4001/health']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+networks:
+  rustskinpay:
+
+volumes:
+  caddy_data:
+  caddy_config:

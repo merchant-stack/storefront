@@ -1,52 +1,43 @@
 # Deployment guide
 
-This is the end-to-end runbook for taking RustSkinPay from `pnpm dev` on Windows to a live site on the public internet. Recommended stack:
+End-to-end runbook for taking RustSkinPay from `pnpm dev` on Windows to a live site. Stack:
 
-- **Web** (Next.js) → **Vercel** (free hobby tier covers MVP)
-- **API + Worker** (Fastify + BullMQ) → **Render** (free starter tiers, Docker-native)
-- **Database** → **Supabase** (already provisioned: `rsryrdppywowaagxmjfo`)
-- **Redis** → **Upstash** (HTTPS-friendly, generous free tier, works through Dmitriy's proxied network)
+- **Web** (Next.js) → **Vercel** (free hobby tier)
+- **API + Worker** (Fastify + BullMQ) → **Aeza VPS** (Frankfurt, ~300₽/mo, crypto payment)
+- **Database** → **Supabase** (project `rsryrdppywowaagxmjfo`)
+- **Redis** → **Upstash** (HTTPS-friendly, works through Dmitriy's proxied network)
 - **Domain + DNS** → **Cloudflare Registrar** (at-cost domains, free Email Routing)
-- **Container registry** → not needed; Render builds from the Dockerfile directly
+- **Container registry** → **GHCR** (GitHub Container Registry — free for this repo)
 
-You can swap Render for Railway / Fly.io / DigitalOcean App Platform without code changes — the Dockerfiles in `apps/api/` and `apps/worker/` are platform-neutral.
-
-The site is launched **with sales disabled** (`CHECKOUT_DISABLED=true`). Catalog + Steam sign-in + trade-URL save all work; the buy button shows "Sales launching soon". Flip the flag once a payment provider is wired.
+The site is launched **with sales disabled** (`CHECKOUT_DISABLED=true`). Catalog + Steam sign-in + trade-URL save all work; the buy button shows "Sales launching soon". Flip the flag once a payment provider is wired (see `PAYMENT_PROVIDERS.md`).
 
 ---
 
-## 1. Pre-flight (one-time, manual)
+## 1. Pre-flight
 
 ### 1.1 Apply pending Supabase migrations
 
-Two migrations are committed locally but not yet applied to the prod Supabase database:
+Two migrations are committed locally but not yet applied to prod:
 
 - `packages/db/prisma/migrations/20260520180000_source_item_bg_color/migration.sql`
 - `packages/db/prisma/migrations/20260520200000_source_provider_waxpeer/migration.sql`
 
-Open Supabase project → SQL Editor → paste each file's contents → Run. Order doesn't matter, both are independent.
+Open Supabase project → SQL Editor → paste each file's contents → Run. Order doesn't matter.
 
-Verify with a quick `SELECT enum_range(NULL::"SourceProvider");` — `WAXPEER` should appear.
+Verify: `SELECT enum_range(NULL::"SourceProvider");` should include `WAXPEER`.
 
-### 1.2 Register the domain
+### 1.2 Domain
 
-Use Cloudflare Registrar for at-cost pricing. Pick `rustskinpay.com` if available.
+Register `rustskinpay.com` at Cloudflare Registrar (~$10/year, at-cost). DNS plan:
 
-Once registered, do NOT change nameservers (Cloudflare manages them by default for Registrar). Plan to use these subdomains:
+- `rustskinpay.com` and `www.rustskinpay.com` → Vercel (apex A record + www CNAME)
+- `api.rustskinpay.com` → Aeza VPS (A record → server IP)
 
-- `rustskinpay.com` and `www.rustskinpay.com` → Vercel (web)
-- `api.rustskinpay.com` → Render (api)
+All three should have Cloudflare proxy **disabled** (grey cloud) — Vercel handles its own TLS, and Caddy on the VPS handles `api.rustskinpay.com`'s TLS via Let's Encrypt.
 
-Worker has no public ingress, so no DNS record.
+### 1.3 Email
 
-### 1.3 Email forwarding for `RustSkinPay@proton.me`
-
-Two options:
-
-- **Easiest**: leave the legal documents pointing at `RustSkinPay@proton.me` and skip domain email entirely. The brand is RustSkinPay but the inbox is ProtonMail-hosted.
-- **Branded**: use Cloudflare Email Routing (free) to forward `support@rustskinpay.com` → `RustSkinPay@proton.me`, then change `SUPPORT_EMAIL` in `apps/web/src/lib/support.ts` to the new address.
-
-Either way, the address listed in the legal docs is the one customers will write to.
+`RustSkinPay@proton.me` is fine as the contact address in legal docs. If you want `support@rustskinpay.com`, set up free Cloudflare Email Routing → forward to ProtonMail.
 
 ---
 
@@ -54,146 +45,198 @@ Either way, the address listed in the legal docs is the one customers will write
 
 Create accounts (all sign in with GitHub):
 
-1. **Vercel** — <https://vercel.com/signup>
-2. **Render** — <https://render.com/register>
-3. **Upstash** — <https://console.upstash.com/login>
+- **Vercel** — <https://vercel.com/signup>
+- **Upstash** — <https://console.upstash.com/login>
+- **Aeza** — <https://aeza.net/> (pay with crypto if needed)
 
-In Upstash: create a new Redis database, region `eu-west-1` (or wherever your Supabase is). After creation, copy the **rediss://** URL (with credentials embedded). This is the value for `REDIS_URL` everywhere.
+### 2.1 Upstash
 
-In Supabase: project Settings → Database → Connection string → URI (use the **transaction-pooler** variant on port 6543, not the direct 5432 one). This is `DATABASE_URL`.
+Create a Redis database, region `eu-west-1` (close to Supabase). Copy the **rediss://** URL — this is `REDIS_URL` for both api and worker.
 
-Generate a `COOKIE_SECRET`:
+### 2.2 Supabase
+
+Project Settings → Database → Connection string → URI. Use the **transaction-pooler** variant on port 6543. This is `DATABASE_URL`.
+
+### 2.3 Generate session secret
 
 ```sh
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-Save it — you'll paste the same value into api env.
+Save it — paste the same value into api env.
 
 ---
 
-## 3. Deploy the API (Render)
+## 3. Provision the VPS (Aeza)
 
-1. Render dashboard → **New +** → **Web Service** → Connect this GitHub repo.
-2. **Name**: `rustskinpay-api`
-3. **Region**: same region as Upstash / Supabase if possible.
-4. **Branch**: `main`
-5. **Runtime**: Docker
-6. **Dockerfile Path**: `apps/api/Dockerfile`
-7. **Docker Build Context Directory**: `.` (repo root)
-8. **Instance Type**: Starter (the free tier sleeps after 15 min idle — fine for soft launch; upgrade once orders flow).
-9. **Environment Variables** — paste the values from §5 below.
-10. Deploy. First build pulls deps, generates Prisma client, and runs `pnpm start` (which is `tsx src/index.ts`). Expect ~4-5 minutes on a cold build.
+1. Sign up at <https://aeza.net/>, top up balance with crypto.
+2. Order a VPS:
+   - **Location:** Frankfurt (Germany)
+   - **OS:** Ubuntu 24.04 LTS
+   - **Plan:** ~1 vCPU, 2 GB RAM, 20 GB NVMe (cheapest "Premium" tier is enough)
+3. Aeza emails you the IP and root password.
+4. Add the VPS IP as the A record for `api.rustskinpay.com` in Cloudflare DNS (proxy off).
 
-After it's live:
+### 3.1 First-time setup
 
-- Render gives you a URL like `https://rustskinpay-api-xxx.onrender.com` — health-check it: `curl https://rustskinpay-api-xxx.onrender.com/health` → `{"ok":true,"service":"rustskinpay-api"}`
-- Add a custom domain in Settings → Custom Domains: `api.rustskinpay.com`. Render gives you a CNAME target; add it in Cloudflare DNS as a CNAME record with proxy **disabled** (orange cloud → off / grey). Wait ~2 min for SSL cert.
+You need an SSH key on your GitHub account first — go to <https://github.com/settings/keys> and add your public key (`~/.ssh/id_ed25519.pub` or generate one with `ssh-keygen -t ed25519`).
+
+Then SSH in as root using the Aeza web console (or `ssh root@<ip>` with the temporary password) and run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/bootstrap.sh \
+  | bash -s -- <your-github-username>
+```
+
+This installs Docker, configures the firewall, fetches your GitHub SSH keys for a new `deploy` user, then disables root SSH + password auth. Test by opening a NEW terminal:
+
+```sh
+ssh deploy@<server-ip>
+```
+
+If that works, the old root session can be closed.
+
+### 3.2 Create env files on the server
+
+As `deploy` user:
+
+```sh
+cd /opt/rustskinpay
+# Pull templates from the repo
+curl -fsSLO https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/api.env.example
+curl -fsSLO https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/worker.env.example
+mv api.env.example api.env
+mv worker.env.example worker.env
+nano api.env       # fill in real values
+nano worker.env    # fill in real values
+chmod 0600 api.env worker.env
+```
 
 ---
 
-## 4. Deploy the worker (Render)
+## 4. Set up GitHub Actions deploy
 
-1. Render dashboard → **New +** → **Background Worker** (NOT Web Service).
-2. **Name**: `rustskinpay-worker`
-3. **Branch**: `main`
-4. **Runtime**: Docker
-5. **Dockerfile Path**: `apps/worker/Dockerfile`
-6. **Docker Build Context Directory**: `.`
-7. **Environment Variables** — see §5 below.
-8. Deploy.
+The repo already has `.github/workflows/deploy.yml`. It needs three secrets on the GitHub repo (Settings → Secrets and variables → Actions):
 
-The worker has no public URL. Check its health from the Render logs panel — you should see periodic `dmarket sync` job-completed lines (every 5 min by default).
+| Secret           | Value                                                       |
+| ---------------- | ----------------------------------------------------------- |
+| `DEPLOY_HOST`    | Server IP (e.g. `1.2.3.4`)                                  |
+| `DEPLOY_USER`    | `deploy`                                                    |
+| `DEPLOY_SSH_KEY` | The PRIVATE key matching the public key you added on GitHub |
+
+For `DEPLOY_SSH_KEY`: paste the full contents of `~/.ssh/id_ed25519` (or whichever private key matches the public one you added on GitHub at step 3.1). Include the `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----` lines. <!-- allow-secret: docs reference, not a real key -->
+
+### 4.1 First deploy
+
+The workflow runs automatically on every push to `main` that touches code, deps, or the deploy/ folder. You can also trigger it manually: Actions tab → Deploy → Run workflow.
+
+What it does:
+
+1. Builds `apps/api/Dockerfile` and `apps/worker/Dockerfile`, pushes to `ghcr.io/rustskinpay/rustskinpay-{api,worker}:sha-XXX` + `:latest`
+2. scp's `deploy/docker-compose.yml` + `deploy/Caddyfile` to `/opt/rustskinpay/` on the server
+3. SSH's in, writes `IMAGE_TAG` to `.env`, runs `docker compose pull && docker compose up -d`
+
+### 4.2 GHCR package visibility
+
+First push creates two packages under <https://github.com/orgs/RustSkinPay/packages> (or your user packages page). They're private by default — that means the VPS needs to `docker login ghcr.io` to pull.
+
+**Easier option** — make them public (the images contain no secrets; env vars are not baked in):
+
+1. Go to the package page on GHCR
+2. Package settings → Change visibility → Public
+3. Confirm
+
+If you'd rather keep them private, on the VPS as `deploy`:
+
+```sh
+# Generate a PAT at https://github.com/settings/tokens with 'read:packages' scope
+echo <PAT> | docker login ghcr.io -u <github-username> --password-stdin
+```
 
 ---
 
-## 5. Environment variables
+## 5. Deploy the web (Vercel)
 
-### 5.1 API (`rustskinpay-api`)
+1. Vercel dashboard → **Add New** → **Project** → import this GitHub repo.
+2. **Framework Preset:** Next.js
+3. **Root Directory:** `apps/web`
+4. **Build Command:** default (`next build`)
+5. **Install Command:** `pnpm install --frozen-lockfile`
+6. **Environment Variables** (set for both Production AND Preview):
 
-| Variable                  | Required | Example / default                                             | Notes                                                                                                                                              |
-| ------------------------- | -------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                | yes      | `production`                                                  |                                                                                                                                                    |
-| `PORT`                    | auto     | `10000` (Render injects)                                      | Don't hardcode                                                                                                                                     |
-| `DATABASE_URL`            | yes      | `postgresql://postgres:...@pooler.supabase.com:6543/postgres` | Use the pooler URL, not direct                                                                                                                     |
-| `REDIS_URL`               | yes      | `rediss://default:...@xxx.upstash.io:6379`                    | Upstash URL with credentials                                                                                                                       |
-| `WEB_ORIGIN`              | yes      | `https://rustskinpay.com`                                     | Canonical web URL (used for redirects + Stripe success URL)                                                                                        |
-| `CORS_EXTRA_ORIGINS`      | optional | `https://www.rustskinpay.com`                                 | Comma-separated. Add the www variant and any Vercel preview URLs you want to allow.                                                                |
-| `API_ORIGIN`              | yes      | `https://api.rustskinpay.com`                                 | Public URL of this service. Used for OpenID return-to.                                                                                             |
-| `COOKIE_SECRET`           | yes      | (32+ random chars)                                            | Generate with the node one-liner in §2. Must match across api replicas.                                                                            |
-| `SESSION_SAMESITE`        | yes      | `lax`                                                         | `lax` is correct when web + api share a registrable domain (rustskinpay.com + api.rustskinpay.com). Set to `none` if they're on different domains. |
-| `CHECKOUT_DISABLED`       | yes      | `true`                                                        | Set `false` only after a payment provider is wired.                                                                                                |
-| `MOCK_PAYMENTS`           | yes      | `false`                                                       | Never `true` in prod — would allow free "purchases".                                                                                               |
-| `STEAM_API_KEY`           | optional |                                                               | Improves Steam profile name/avatar. Without it we fall back to derived names. <https://steamcommunity.com/dev/apikey>                              |
-| `MAX_BUY_PRICE_MINOR`     | optional | `500` (= $5)                                                  | Soft cap on what's purchasable.                                                                                                                    |
-| `MAX_LISTING_AGE_SECONDS` | optional | `600`                                                         | Rejects checkout for stale listings.                                                                                                               |
-| `WAXPEER_API_KEY`         | optional |                                                               | Not used by api directly, but if you want `/api/scripts/waxpeer-probe.ts` to work locally, set it.                                                 |
-| `STRIPE_SECRET_KEY`       | optional |                                                               | Wire when payments go live.                                                                                                                        |
-| `STRIPE_WEBHOOK_SECRET`   | optional |                                                               | Wire when payments go live.                                                                                                                        |
+   | Variable                        | Value                                             |
+   | ------------------------------- | ------------------------------------------------- |
+   | `NEXT_PUBLIC_API_URL`           | `https://api.rustskinpay.com`                     |
+   | `NEXT_PUBLIC_CHECKOUT_DISABLED` | `true` — must match the api's `CHECKOUT_DISABLED` |
 
-### 5.2 Worker (`rustskinpay-worker`)
+7. Deploy.
+8. Settings → Domains → add `rustskinpay.com` + `www.rustskinpay.com`. Vercel gives DNS records — add to Cloudflare DNS, proxy off.
 
-| Variable                   | Required   | Example       | Notes                                                                                         |
-| -------------------------- | ---------- | ------------- | --------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                 | yes        | `production`  |                                                                                               |
-| `DATABASE_URL`             | yes        | (same as api) | Must point at the same Supabase database                                                      |
-| `REDIS_URL`                | yes        | (same as api) | Must point at the same Upstash instance                                                       |
-| `WAXPEER_API_KEY`          | yes        |               | Without it the worker runs in mock mode and your catalog is fake items                        |
-| `DMARKET_SYNC_LIMIT`       | optional   | `60`          |                                                                                               |
-| `DMARKET_SYNC_INTERVAL_MS` | optional   | `300000`      | 5 minutes                                                                                     |
-| `WORKER_HEALTH_PORT`       | optional   | `4001`        | Render doesn't expose this publicly, but the health-check inside the container still uses it. |
-| `STRIPE_SECRET_KEY`        | optional   |               | Worker uses it to issue refunds when a buy fails. Required once `CHECKOUT_DISABLED=false`.    |
-| `MOCK_PAYMENTS`            | yes        | `false`       | Same logic as api.                                                                            |
-| `STEAM_BOT_*`              | not needed |               | Waxpeer P2P delivery means no own-bot Steam account. Leave unset.                             |
+---
 
-### 5.3 Web (Vercel)
+## 6. Smoke test
 
-Vercel reads `NEXT_PUBLIC_*` vars at build time. Set them under Settings → Environment Variables for both **Production** and **Preview** environments.
+From mobile data (not your local Wi-Fi, to bypass any cache weirdness):
 
-| Variable                        | Required | Example                                           |
+1. `https://rustskinpay.com` → catalog renders, item images load
+2. Click "Sign in" → Steam OpenID flow → returns signed in
+3. `/account` → name + avatar present, save a Steam trade URL → success
+4. Click an item → "Buy" → "Sales launching soon" panel (because `CHECKOUT_DISABLED=true`)
+5. `/terms`, `/privacy`, `/refunds` → render with entity address
+
+If something fails, check:
+
+- API logs on VPS: `ssh deploy@<ip> 'cd /opt/rustskinpay && docker compose logs -f api'`
+- Caddy logs: `docker compose logs -f caddy` — TLS errors here mean DNS A record didn't propagate yet
+- Vercel logs in the dashboard (Functions tab)
+- Browser devtools Network tab for CORS / cookie errors
+
+---
+
+## 7. Reference: env vars
+
+### 7.1 API (`api.env` on the VPS)
+
+| Variable                  | Required | Example                                                       | Notes                                                                                |
+| ------------------------- | -------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `NODE_ENV`                | yes      | `production`                                                  |                                                                                      |
+| `PORT`                    | yes      | `4000`                                                        | Must match the port Caddy reverse-proxies to (`api:4000`) and the Dockerfile EXPOSE. |
+| `DATABASE_URL`            | yes      | `postgresql://postgres:...@pooler.supabase.com:6543/postgres` | Pooler URL, not direct                                                               |
+| `REDIS_URL`               | yes      | `rediss://default:...@xxx.upstash.io:6379`                    |                                                                                      |
+| `WEB_ORIGIN`              | yes      | `https://rustskinpay.com`                                     |                                                                                      |
+| `API_ORIGIN`              | yes      | `https://api.rustskinpay.com`                                 | Public URL of this service. Used for OpenID return-to.                               |
+| `CORS_EXTRA_ORIGINS`      | optional | `https://www.rustskinpay.com`                                 | Comma-separated.                                                                     |
+| `COOKIE_SECRET`           | yes      | (32+ random chars)                                            | Generate with the node one-liner in §2.3                                             |
+| `SESSION_SAMESITE`        | yes      | `lax`                                                         | `lax` for web+api on same registrable domain; `none` if they diverge                 |
+| `CHECKOUT_DISABLED`       | yes      | `true`                                                        | Flip to `false` only after payment provider wired                                    |
+| `MOCK_PAYMENTS`           | yes      | `false`                                                       | Never `true` in prod                                                                 |
+| `STEAM_API_KEY`           | optional |                                                               | Improves Steam profile fetch                                                         |
+| `MAX_BUY_PRICE_MINOR`     | optional | `500` (= $5)                                                  | Soft cap                                                                             |
+| `MAX_LISTING_AGE_SECONDS` | optional | `600`                                                         |                                                                                      |
+| `STRIPE_SECRET_KEY`       | optional |                                                               | Wire at payment launch                                                               |
+| `STRIPE_WEBHOOK_SECRET`   | optional |                                                               | Wire at payment launch                                                               |
+
+### 7.2 Worker (`worker.env` on the VPS)
+
+| Variable                   | Required   | Notes                                                                            |
+| -------------------------- | ---------- | -------------------------------------------------------------------------------- |
+| `NODE_ENV`                 | yes        | `production`                                                                     |
+| `DATABASE_URL`             | yes        | Same as api                                                                      |
+| `REDIS_URL`                | yes        | Same as api                                                                      |
+| `WAXPEER_API_KEY`          | yes        | Without it, catalog sync runs in mock mode                                       |
+| `DMARKET_SYNC_LIMIT`       | optional   | default `60`                                                                     |
+| `DMARKET_SYNC_INTERVAL_MS` | optional   | default `300000` (5 min)                                                         |
+| `WORKER_HEALTH_PORT`       | optional   | default `4001` (not exposed to public; container healthcheck uses it)            |
+| `STRIPE_SECRET_KEY`        | optional   | Required once `CHECKOUT_DISABLED=false` (worker issues refunds when a buy fails) |
+| `MOCK_PAYMENTS`            | yes        | `false`                                                                          |
+| `STEAM_BOT_*`              | not needed | Waxpeer P2P delivery — no own-bot                                                |
+
+### 7.3 Web (Vercel)
+
+| Variable                        | Required | Value                                             |
 | ------------------------------- | -------- | ------------------------------------------------- |
 | `NEXT_PUBLIC_API_URL`           | yes      | `https://api.rustskinpay.com`                     |
 | `NEXT_PUBLIC_CHECKOUT_DISABLED` | yes      | `true` — must match the api's `CHECKOUT_DISABLED` |
-
----
-
-## 6. Deploy the web (Vercel)
-
-1. Vercel dashboard → **Add New** → **Project** → import this GitHub repo.
-2. **Framework Preset**: Next.js (auto-detected)
-3. **Root Directory**: `apps/web`
-4. **Build Command**: leave default (`next build`)
-5. **Output Directory**: leave default
-6. **Install Command**: `pnpm install --frozen-lockfile`
-7. **Environment Variables**: see §5.3
-8. Deploy. First build ~3 minutes.
-
-After deploy:
-
-- Vercel assigns `rustskinpay-xxx.vercel.app`. Visit and verify the catalog loads and Steam sign-in routes to api (it will, once `NEXT_PUBLIC_API_URL` is set correctly).
-- Settings → Domains → add `rustskinpay.com` and `www.rustskinpay.com`. Vercel gives you DNS records:
-  - Apex `rustskinpay.com`: A record → `76.76.21.21`
-  - `www`: CNAME → `cname.vercel-dns.com`
-- Add both in Cloudflare DNS with proxy **disabled** (grey cloud). Wait ~2 min for SSL.
-
----
-
-## 7. Smoke test
-
-From a different network (mobile data is fine, to avoid any local-cache weirdness):
-
-1. Open `https://rustskinpay.com` → catalog renders, item images load.
-2. Click "Sign in" → lands on `/account` with the legal acceptance text. Click "Continue with Steam" → routes to Steam OAuth → returns signed in.
-3. Navigate to `/account` → name + avatar present.
-4. Save a Steam trade URL → success message.
-5. Click an item → click "Buy" → see "Sales launching soon" panel (because `CHECKOUT_DISABLED=true`).
-6. Visit `/terms`, `/privacy`, `/refunds` → all render with the entity address.
-
-If any of those fail, check:
-
-- Render API logs for the failing endpoint
-- Browser devtools Network tab for CORS or cookie errors
-- Vercel function logs (if any)
 
 ---
 
@@ -201,38 +244,46 @@ If any of those fail, check:
 
 ### 8.1 Logs
 
-- Render: realtime tail via the dashboard, or `render logs --service rustskinpay-api`.
-- Vercel: realtime tail under the Project → Functions tab.
+- VPS: `ssh deploy@<ip>` then `cd /opt/rustskinpay && docker compose logs -f <service>`
+- Vercel: Functions tab in the dashboard
 
-### 8.2 Database migrations after launch
+### 8.2 Editing env on the VPS
+
+```sh
+ssh deploy@<ip>
+cd /opt/rustskinpay
+nano api.env                       # or worker.env
+docker compose up -d api           # picks up new env
+```
+
+### 8.3 Database migrations after launch
 
 When you add a new Prisma migration locally:
 
-1. Commit it under `packages/db/prisma/migrations/`.
-2. Apply to Supabase prod manually (SQL Editor) — there is no automated apply step in CI yet.
-3. Push the commit; Render rebuilds both api and worker.
+1. Commit it under `packages/db/prisma/migrations/`
+2. Apply to Supabase prod manually (SQL Editor) — there's no automated apply step in CI yet
+3. Push the commit; GitHub Actions rebuilds + redeploys
 
-If you ever want auto-apply, add a `prisma migrate deploy` step to the api's Dockerfile entrypoint — but be careful, that introduces deploy-time DB writes that can fail.
+### 8.4 Flipping sales on
 
-### 8.3 Flipping sales on
+When a payment provider is picked (`PAYMENT_PROVIDERS.md` has the per-provider integration guide):
 
-When you've picked a payment provider:
+1. Add the provider's keys to `api.env` (and `worker.env` if it issues refunds), `docker compose up -d`
+2. Webhook URL in the provider dashboard: `https://api.rustskinpay.com/api/webhooks/<provider-id>`
+3. Edit `api.env`: `CHECKOUT_DISABLED=false`, `docker compose up -d api`
+4. Set `NEXT_PUBLIC_CHECKOUT_DISABLED=false` on Vercel and redeploy web (Next.js bakes `NEXT_PUBLIC_*` at build time)
+5. Test a real $1 purchase end-to-end
 
-1. Implement / configure it per `PAYMENT_PROVIDERS.md`. The pipeline is provider-agnostic — Stripe, NOWPayments, Coinbase Commerce, CryptoCloud, or anything else slots in via a single file.
-2. Set the provider's keys in Render env on both api and worker.
-3. Webhook URL goes into the provider's dashboard as `https://api.rustskinpay.com/api/webhooks/<provider-id>` (lowercase or uppercase, both work). For Stripe today: `/api/webhooks/stripe`.
-4. Set `CHECKOUT_DISABLED=false` on the api.
-5. Set `NEXT_PUBLIC_CHECKOUT_DISABLED=false` on Vercel and redeploy web (Next.js bakes `NEXT_PUBLIC_*` at build time — env-only changes require a redeploy).
-6. Test a real $1 purchase end-to-end.
-
-### 8.4 Costs at launch
+### 8.5 Costs at launch
 
 - Vercel hobby: $0
-- Render starter: $0 each (api sleeps after 15 min idle; worker stays alive)
-- Upstash free: $0 (10k commands/day; catalog sync uses maybe 200/day)
+- Aeza VPS (Frankfurt, 1 vCPU / 2GB): ~300₽/mo (~$3-4)
+- Upstash free: $0 (10k commands/day; catalog sync uses ~200/day)
 - Supabase free: $0 (project already provisioned)
 - Cloudflare Registrar: ~$10/year for `.com`
 
-Total at-launch hosting cost: domain only.
+Total at-launch hosting: ~$4-5/mo + domain.
 
-Once orders flow, upgrade Render API to `Standard` ($7/mo) so it doesn't cold-start, and consider Upstash pay-as-you-go if you exceed the free quota.
+### 8.6 Backups
+
+Supabase free tier includes daily backups (7-day retention). For the VPS itself, Aeza offers snapshot backups in the dashboard — enable weekly snapshots for ~30₽/mo extra. The VPS holds no irreplaceable state (Caddy can re-issue certs, env files can be re-pasted), but a snapshot saves time if you ever need to rebuild.
