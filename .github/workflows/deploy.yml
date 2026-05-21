@@ -73,6 +73,21 @@ jobs:
           cache-from: type=gha,scope=worker
           cache-to: type=gha,scope=worker,mode=max
 
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/merchant-stack/storefront-web:latest
+            ghcr.io/merchant-stack/storefront-web:${{ steps.tag.outputs.tag }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.rustskinpay.com
+            NEXT_PUBLIC_CHECKOUT_DISABLED=true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
   deploy:
     name: Deploy to Aeza
     runs-on: ubuntu-latest

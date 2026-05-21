@@ -20,3 +20,26 @@ api.rustskinpay.com {
 		level INFO
 	}
 }
+
+# Web frontend — apex + www. Next.js handles its own security headers
+# (CSP, X-Frame-Options, etc.) via next.config.mjs; Caddy just adds HSTS
+# at the edge.
+www.rustskinpay.com {
+	redir https://rustskinpay.com{uri} permanent
+}
+
+rustskinpay.com {
+	encode zstd gzip
+	reverse_proxy web:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}

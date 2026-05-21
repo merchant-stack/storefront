@@ -22,8 +22,23 @@ services:
       - caddy_config:/config
     depends_on:
       - api
+      - web
     networks:
       - rustskinpay
+
+  web:
+    image: ghcr.io/merchant-stack/storefront-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - '3000'
+    networks:
+      - rustskinpay
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:3000/']
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
 
   api:
     image: ghcr.io/merchant-stack/storefront-api:${IMAGE_TAG:-latest}
