@@ -84,7 +84,7 @@ You need an SSH key on your GitHub account first — go to <https://github.com/s
 Then SSH in as root using the Aeza web console (or `ssh root@<ip>` with the temporary password) and run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/bootstrap.sh \
+curl -fsSL https://raw.githubusercontent.com/merchant-stack/storefront/main/deploy/bootstrap.sh \
   | bash -s -- <your-github-username>
 ```
 
@@ -103,8 +103,8 @@ As `deploy` user:
 ```sh
 cd /opt/rustskinpay
 # Pull templates from the repo
-curl -fsSLO https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/api.env.example
-curl -fsSLO https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/worker.env.example
+curl -fsSLO https://raw.githubusercontent.com/merchant-stack/storefront/main/deploy/api.env.example
+curl -fsSLO https://raw.githubusercontent.com/merchant-stack/storefront/main/deploy/worker.env.example
 mv api.env.example api.env
 mv worker.env.example worker.env
 nano api.env       # fill in real values
@@ -132,7 +132,7 @@ The workflow runs automatically on every push to `main` that touches code, deps,
 
 What it does:
 
-1. Builds `apps/api/Dockerfile` and `apps/worker/Dockerfile`, pushes to `ghcr.io/rustskinpay/rustskinpay-{api,worker}:sha-XXX` + `:latest`
+1. Builds `apps/api/Dockerfile` and `apps/worker/Dockerfile`, pushes to `ghcr.io/merchant-stack/storefront-{api,worker}:sha-XXX` + `:latest`
 2. scp's `deploy/docker-compose.yml` + `deploy/Caddyfile` to `/opt/rustskinpay/` on the server
 3. SSH's in, writes `IMAGE_TAG` to `.env`, runs `docker compose pull && docker compose up -d`
 

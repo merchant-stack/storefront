@@ -56,8 +56,8 @@ jobs:
           file: apps/api/Dockerfile
           push: true
           tags: |
-            ghcr.io/rustskinpay/rustskinpay-api:latest
-            ghcr.io/rustskinpay/rustskinpay-api:${{ steps.tag.outputs.tag }}
+            ghcr.io/merchant-stack/storefront-api:latest
+            ghcr.io/merchant-stack/storefront-api:${{ steps.tag.outputs.tag }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
 
@@ -68,8 +68,8 @@ jobs:
           file: apps/worker/Dockerfile
           push: true
           tags: |
-            ghcr.io/rustskinpay/rustskinpay-worker:latest
-            ghcr.io/rustskinpay/rustskinpay-worker:${{ steps.tag.outputs.tag }}
+            ghcr.io/merchant-stack/storefront-worker:latest
+            ghcr.io/merchant-stack/storefront-worker:${{ steps.tag.outputs.tag }}
           cache-from: type=gha,scope=worker
           cache-to: type=gha,scope=worker,mode=max
 

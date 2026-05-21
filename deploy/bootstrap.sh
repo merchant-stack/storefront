@@ -2,7 +2,7 @@
 # One-time setup for a fresh Ubuntu 24.04 LTS server (Aeza Frankfurt or similar).
 #
 # Usage (run as root, e.g. via Aeza web console "Root SSH"):
-#   curl -fsSL https://raw.githubusercontent.com/RustSkinPay/rustskinpay/main/deploy/bootstrap.sh \
+#   curl -fsSL https://raw.githubusercontent.com/merchant-stack/storefront/main/deploy/bootstrap.sh \
 #     | bash -s -- <your-github-username>
 #
 # What it does:

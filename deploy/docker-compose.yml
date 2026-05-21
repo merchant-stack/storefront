@@ -26,7 +26,7 @@ services:
       - rustskinpay
 
   api:
-    image: ghcr.io/rustskinpay/rustskinpay-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/merchant-stack/storefront-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ./api.env
@@ -42,7 +42,7 @@ services:
       retries: 3
 
   worker:
-    image: ghcr.io/rustskinpay/rustskinpay-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/merchant-stack/storefront-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ./worker.env
