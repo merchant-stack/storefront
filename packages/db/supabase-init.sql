@@ -1,7 +1,39 @@
 -- Combined schema for first-time Supabase setup.
 -- Generated from prisma/migrations/* on 2026-05-21.
 -- Run once in Supabase SQL Editor on a fresh project.
--- Idempotent where possible (IF NOT EXISTS / IF EXISTS).
+-- IDEMPOTENT: safe to re-run; drops everything in `public` first.
+
+-- ============================================================================
+-- Wipe — drop our tables and types so the script can be re-run cleanly.
+-- Does NOT touch other schemas (auth, storage, etc.), only `public`.
+-- ============================================================================
+
+DROP TABLE IF EXISTS "AuditLog" CASCADE;
+DROP TABLE IF EXISTS "WebhookEvent" CASCADE;
+DROP TABLE IF EXISTS "Trade" CASCADE;
+DROP TABLE IF EXISTS "Payment" CASCADE;
+DROP TABLE IF EXISTS "SourceTransaction" CASCADE;
+DROP TABLE IF EXISTS "SourceItem" CASCADE;
+DROP TABLE IF EXISTS "OrderItem" CASCADE;
+DROP TABLE IF EXISTS "Order" CASCADE;
+DROP TABLE IF EXISTS "Merchant" CASCADE;
+DROP TABLE IF EXISTS "Listing" CASCADE;
+DROP TABLE IF EXISTS "PriceSnapshot" CASCADE;
+DROP TABLE IF EXISTS "InventoryItem" CASCADE;
+DROP TABLE IF EXISTS "SteamItem" CASCADE;
+DROP TABLE IF EXISTS "User" CASCADE;
+
+DROP TYPE IF EXISTS "ActorType" CASCADE;
+DROP TYPE IF EXISTS "TradeStatus" CASCADE;
+DROP TYPE IF EXISTS "PaymentStatus" CASCADE;
+DROP TYPE IF EXISTS "PaymentProvider" CASCADE;
+DROP TYPE IF EXISTS "OrderStatus" CASCADE;
+DROP TYPE IF EXISTS "MerchantStatus" CASCADE;
+DROP TYPE IF EXISTS "ListingStatus" CASCADE;
+DROP TYPE IF EXISTS "PriceSource" CASCADE;
+DROP TYPE IF EXISTS "UserRole" CASCADE;
+DROP TYPE IF EXISTS "SourceTransactionState" CASCADE;
+DROP TYPE IF EXISTS "SourceProvider" CASCADE;
 
 -- ============================================================================
 -- Migration 20260518121357_init
