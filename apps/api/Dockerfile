@@ -1,23 +1,23 @@
 # RustSkinPay API — production image.
 #
-# Build context is the monorepo root so pnpm workspace links resolve:
+# Build from the monorepo root so pnpm workspace links resolve:
 #   docker build -f apps/api/Dockerfile -t rustskinpay-api .
 #
-# Runtime model: we ship the TS source and run it through tsx (esbuild-backed
-# TS loader). This sidesteps a build step for the workspace packages
-# (@rustskinpay/db, @rustskinpay/shared) which export .ts source directly. The
-# cold-start cost is ~200ms; for a long-running container this is irrelevant.
-# Render / Railway / Fly all support this layout.
+# Runtime model: ship the TS source and run via tsx. Single stage keeps the
+# pnpm workspace's nested node_modules intact (multi-stage COPY of the root
+# node_modules alone loses packages/db/node_modules/.bin/prisma).
 
 ARG NODE_VERSION=22-alpine
 
-# ---------- deps ----------
-FROM node:${NODE_VERSION} AS deps
+FROM node:${NODE_VERSION}
+
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
-# Copy workspace manifests first so layer caching skips reinstall when only
-# source changes.
+ENV NODE_ENV=production
+ENV PORT=4000
+
+# Workspace manifests first — layer cache hits when only source changes.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/worker/package.json ./apps/worker/
@@ -25,38 +25,19 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 
-# Honour pnpm's onlyBuiltDependencies (Prisma engines, msgpackr, etc.) and
-# install everything including dev deps — tsx is in deps so this is small.
+# All deps including dev (tsx + prisma needed at runtime / generate time).
 RUN pnpm install --frozen-lockfile --prod=false
 
-# ---------- runtime ----------
-FROM node:${NODE_VERSION} AS runtime
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV PORT=4000
-
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
-
-# Pull workspace metadata + installed node_modules from the deps stage.
-COPY --from=deps /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/tsconfig.base.json ./
-COPY --from=deps /app/node_modules ./node_modules
-
-# Workspace packages — symlinked into node_modules by pnpm, so we ship their
-# source + their package.json so the symlinks resolve at runtime.
+# Workspace package sources.
 COPY packages/db ./packages/db
 COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
 
-# Prisma client needs to be generated against the schema. The schema's
-# runtime adapter asserts DATABASE_URL even during generate, so we feed
-# it a placeholder URL (no DB connection happens).
+# Generate the Prisma client. Schema's runtime adapter asserts DATABASE_URL
+# even during generate, so feed a placeholder (no DB connection happens).
 RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder \
     pnpm --filter @rustskinpay/db exec prisma generate
 
-# API source.
-COPY apps/api ./apps/api
-
-# Non-root user (node:alpine ships one).
 USER node
 
 EXPOSE 4000
