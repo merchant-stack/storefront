@@ -5,7 +5,7 @@ End-to-end runbook for taking RustSkinPay from `pnpm dev` on Windows to a live s
 - **Web** (Next.js) → **Vercel** (free hobby tier)
 - **API + Worker** (Fastify + BullMQ) → **Aeza VPS** (Frankfurt, ~300₽/mo, crypto payment)
 - **Database** → **Supabase** (project `rsryrdppywowaagxmjfo`)
-- **Redis** → **Upstash** (HTTPS-friendly, works through Dmitriy's proxied network)
+- **Redis** → **Upstash** (HTTPS-friendly, works through proxied dev networks)
 - **Domain + DNS** → **Cloudflare Registrar** (at-cost domains, free Email Routing)
 - **Container registry** → **GHCR** (GitHub Container Registry — free for this repo)
 

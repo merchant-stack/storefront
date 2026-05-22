@@ -62,7 +62,7 @@ const schema = z.object({
   // browse-only mode: catalog and Steam sign-in still work, the buy button
   // shows "Sales launching soon" on the web, and POST /api/checkout returns
   // 503 with `sales_not_active`. Flip to false once a payment provider is
-  // wired and Dmitriy is ready to accept orders. Must match the web side's
+  // wired and the operator is ready to accept orders. Must match the web side's
   // NEXT_PUBLIC_CHECKOUT_DISABLED at deploy time.
   CHECKOUT_DISABLED: z
     .enum(['true', 'false'])

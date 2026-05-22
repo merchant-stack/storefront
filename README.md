@@ -2,7 +2,7 @@
 
 Rust skins marketplace + embeddable payment aggregator. English-language site, Stripe-style hosted checkout.
 
-See [`PLAN.md`](./PLAN.md) for the phased roadmap, architecture decisions, and the action items Dmitriy needs to complete (Steam API key, bot account, Stripe test account).
+See [`PLAN.md`](./PLAN.md) for the phased roadmap, architecture decisions, and the operator action items (Steam API key, bot account, Stripe test account).
 
 ## Repository layout
 
@@ -36,14 +36,14 @@ pnpm dev                           # starts all apps
 
 ## Common commands
 
-| Command | What it does |
-|---------|--------------|
-| `pnpm dev` | Runs every app in dev mode (Turborepo) |
-| `pnpm build` | Builds every app + package |
-| `pnpm typecheck` | TS strict-mode check across the monorepo |
-| `pnpm lint` | ESLint across the monorepo |
-| `pnpm format` | Prettier write |
-| `pnpm --filter <name> <cmd>` | Run a command in a single workspace |
+| Command                      | What it does                             |
+| ---------------------------- | ---------------------------------------- |
+| `pnpm dev`                   | Runs every app in dev mode (Turborepo)   |
+| `pnpm build`                 | Builds every app + package               |
+| `pnpm typecheck`             | TS strict-mode check across the monorepo |
+| `pnpm lint`                  | ESLint across the monorepo               |
+| `pnpm format`                | Prettier write                           |
+| `pnpm --filter <name> <cmd>` | Run a command in a single workspace      |
 
 ## Status
 

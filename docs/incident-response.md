@@ -2,7 +2,6 @@
 
 > Last updated: 2026-05-20
 > Status: Draft (pre-launch)
-> Owner: Dmitriy
 
 What to do when something goes wrong. Designed to be executed under pressure — short, concrete steps, with the destructive options at the end.
 

@@ -2,7 +2,6 @@
 
 > Last updated: 2026-05-20
 > Status: Draft (pre-launch)
-> Owner: Dmitriy
 
 This document captures **what we protect**, **against whom**, **how**, and **what's deliberately out of scope**. Review at every major architecture change and quarterly thereafter.
 
@@ -35,7 +34,7 @@ Threat actors, ranked by likelihood:
 4. **Insiders / supply chain** — compromised npm packages, malicious co-maintainers, leaked CI secrets.
 5. **State / sophisticated** — out of scope for current resources; rely on hosting + Stripe defenses.
 
-**Explicitly out of scope:** physical theft of Dmitriy's laptop (use FDE), Stripe being breached, Valve being breached, Postgres ZDE in Supabase.
+**Explicitly out of scope:** physical theft of operator devices (use FDE), Stripe being breached, Valve being breached, Postgres ZDE in Supabase.
 
 ---
 

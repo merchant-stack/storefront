@@ -1,5 +1,5 @@
 -- RustSkinPay dev seed — mirrors prisma/seed.ts but applied via Supabase SQL Editor
--- because Dmitriy's network blocks direct PG protocol (see memory: network-postgres-tls-blocked).
+-- as an alternative when the local dev network blocks direct PG protocol.
 -- Safe to re-run.
 
 BEGIN;

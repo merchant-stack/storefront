@@ -108,7 +108,7 @@ export const verifySteamOpenId = async (
 
 /**
  * Fetch a Steam player's public profile summary. Returns null if the API key
- * is missing (e.g. during local dev before Dmitriy provisions one) or the
+ * is missing (e.g. during local dev before the operator provisions one) or the
  * profile cannot be fetched.
  */
 export const fetchSteamPlayerSummary = async (
