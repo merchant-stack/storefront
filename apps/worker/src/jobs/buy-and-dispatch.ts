@@ -145,7 +145,7 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
     'dispatch',
     { tradeId: trade.id },
     {
-      jobId: `trade:${trade.id}`,
+      jobId: `trade_${trade.id}`,
       attempts: 5,
       backoff: { type: 'exponential', delay: 30_000 },
       removeOnComplete: { age: 60 * 60 * 24, count: 1000 },

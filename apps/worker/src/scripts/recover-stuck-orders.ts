@@ -35,7 +35,7 @@ const main = async (): Promise<void> => {
       'buy',
       { orderId: o.id },
       {
-        jobId: `buy:${o.id}:recover:${Date.now()}`,
+        jobId: `buy_${o.id}_recover_${Date.now()}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: { age: 60 * 60 * 24, count: 1000 },

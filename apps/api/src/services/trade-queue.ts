@@ -23,7 +23,7 @@ export const enqueueTradeDispatch = async (tradeId: string): Promise<void> => {
     'dispatch',
     { tradeId },
     {
-      jobId: `trade:${tradeId}`,
+      jobId: `trade_${tradeId}`,
       attempts: 5,
       backoff: { type: 'exponential', delay: 30_000 },
       removeOnComplete: { age: 60 * 60 * 24, count: 1000 },
@@ -37,7 +37,7 @@ export const enqueueBuyAndDispatch = async (orderId: string): Promise<void> => {
     'buy',
     { orderId },
     {
-      jobId: `buy:${orderId}`,
+      jobId: `buy_${orderId}`,
       attempts: 3,
       backoff: { type: 'exponential', delay: 30_000 },
       removeOnComplete: { age: 60 * 60 * 24, count: 1000 },
