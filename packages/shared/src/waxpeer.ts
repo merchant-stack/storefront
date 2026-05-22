@@ -74,7 +74,12 @@ interface WaxpeerItemListResponse {
 
 interface WaxpeerBuyResponse {
   success?: boolean;
-  id?: string;
+  // Waxpeer returns this as a number (e.g. 26430554), not a string. We coerce
+  // to string before persisting because our schema column is String — a
+  // previous incident saw Prisma throw "Expected String, provided Int" on a
+  // *successful* buy, the worker crashed before recording success, and BullMQ
+  // retried (Waxpeer then correctly said "already bought") → false refund.
+  id?: number | string;
   msg?: string;
 }
 
@@ -155,7 +160,7 @@ export function createWaxpeerClient(config: WaxpeerClientConfig): WaxpeerClient 
       }
       return {
         success: true,
-        sourcePaymentId: body.id ?? undefined,
+        sourcePaymentId: body.id !== undefined ? String(body.id) : undefined,
         raw: body,
       };
     },
