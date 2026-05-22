@@ -379,3 +379,15 @@ ALTER TABLE "SourceItem" ADD COLUMN IF NOT EXISTS "iconBackgroundColor" TEXT;
 -- ============================================================================
 
 ALTER TYPE "SourceProvider" ADD VALUE IF NOT EXISTS 'WAXPEER';
+
+
+-- ============================================================================
+-- Seed: internal merchant row
+-- Required because the storefront is single-tenant — every Order references
+-- this fixed merchantId. Without it POST /api/checkout fails with a foreign
+-- key violation (Order_merchantId_fkey). Safe to re-run.
+-- ============================================================================
+
+INSERT INTO "Merchant" (id, name, "isInternal", status, "settlementCurrency", "createdAt", "updatedAt")
+VALUES ('internal-merchant', 'RustSupply Marketplace', true, 'ACTIVE', 'USD', now(), now())
+ON CONFLICT (id) DO NOTHING;
