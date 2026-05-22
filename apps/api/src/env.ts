@@ -75,7 +75,9 @@ const schema = z.object({
   // charging the buyer for a listing that's gone stale between sync cycles.
   // The post-payment refund flow still catches actual buy failures, but this
   // cuts the failure window meaningfully without hitting Waxpeer per click.
-  MAX_LISTING_AGE_SECONDS: z.coerce.number().int().positive().default(600),
+  // Set to 2x the sync interval (sync runs every 2min in worker.env) so a
+  // single missed tick is tolerated; anything older is genuinely abandoned.
+  MAX_LISTING_AGE_SECONDS: z.coerce.number().int().positive().default(240),
   // Global kill-switch for the checkout endpoint. When true the site is in
   // browse-only mode: catalog and Steam sign-in still work, the buy button
   // shows "Sales launching soon" on the web, and POST /api/checkout returns

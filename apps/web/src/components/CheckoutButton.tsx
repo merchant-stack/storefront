@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { API_URL } from '@/lib/api';
+import { formatPrice } from '@/lib/format';
 
 interface Props {
   sourceItemId: string;
@@ -12,7 +13,8 @@ interface Props {
 type CheckoutError =
   | { kind: 'text'; message: string }
   | { kind: 'trade_url_required' }
-  | { kind: 'not_authenticated' };
+  | { kind: 'not_authenticated' }
+  | { kind: 'stale'; lastKnownPrice: number; lastKnownCurrency: string };
 
 // Global kill-switch. Read at build time from NEXT_PUBLIC_CHECKOUT_DISABLED.
 // Must match the server's CHECKOUT_DISABLED env. When true, the buy button
@@ -22,6 +24,7 @@ const CHECKOUT_DISABLED = process.env.NEXT_PUBLIC_CHECKOUT_DISABLED === 'true';
 
 export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
   const [pending, setPending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<CheckoutError | null>(null);
 
   if (CHECKOUT_DISABLED) {
@@ -63,14 +66,29 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
           setError({ kind: 'trade_url_required' });
           return;
         }
+        if (body?.error === 'listing_stale') {
+          // Fetch the current server snapshot so the buyer sees the latest
+          // price + availability instead of being told to manually refresh.
+          const fresh = await fetch(`${API_URL}/api/items/${sourceItemId}`, { cache: 'no-store' })
+            .then((r) => (r.ok ? (r.json() as Promise<{ item: { salePriceMinor: number; currency: string; available?: boolean } }>) : null))
+            .catch(() => null);
+          if (!fresh || fresh.item.available === false) {
+            setError({ kind: 'text', message: 'This skin just sold out. Browse the market for similar items.' });
+            return;
+          }
+          setError({
+            kind: 'stale',
+            lastKnownPrice: fresh.item.salePriceMinor,
+            lastKnownCurrency: fresh.item.currency,
+          });
+          return;
+        }
         const friendly =
           body?.error === 'item_temporarily_unavailable'
             ? "Sorry — this item is temporarily out of stock. We're restocking soon."
             : body?.error === 'item_unavailable'
               ? 'This item is no longer available.'
-              : body?.error === 'listing_stale'
-                ? 'This listing is out of date — please refresh the page to see the current price.'
-                : (body?.error ?? `Checkout failed (${res.status})`);
+              : (body?.error ?? `Checkout failed (${res.status})`);
         setError({ kind: 'text', message: friendly });
         return;
       }
@@ -80,6 +98,18 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
       setError({ kind: 'text', message: err instanceof Error ? err.message : 'Network error' });
     } finally {
       setPending(false);
+    }
+  };
+
+  const onRetryAfterRefresh = async () => {
+    // After we showed the latest price, let the buyer kick the checkout
+    // straight from the inline button rather than reloading the page.
+    setRefreshing(true);
+    setError(null);
+    try {
+      await onClick();
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -104,7 +134,22 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
           </>
         )}
       </button>
-      {error?.kind === 'trade_url_required' ? (
+      {error?.kind === 'stale' ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-3 text-sm text-amber-200">
+          <p className="font-medium">Price just updated</p>
+          <p className="mt-0.5 text-amber-300/80">
+            Latest price: <span className="font-mono font-semibold text-amber-100">{formatPrice(error.lastKnownPrice, error.lastKnownCurrency)}</span>. Continue to checkout?
+          </p>
+          <button
+            type="button"
+            onClick={onRetryAfterRefresh}
+            disabled={refreshing}
+            className="btn-primary mt-3 w-full py-2.5 text-sm"
+          >
+            {refreshing ? 'Working…' : 'Continue at new price'}
+          </button>
+        </div>
+      ) : error?.kind === 'trade_url_required' ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5 text-sm text-amber-200">
           <p className="font-medium">Add your Steam trade URL first</p>
           <p className="mt-0.5 text-amber-300/80">

@@ -28,7 +28,10 @@ const schema = z.object({
   DMARKET_DEFAULT_MARKUP_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
   WAXPEER_API_KEY: optionalNonEmpty,
   DMARKET_SYNC_LIMIT: z.coerce.number().int().positive().default(60),
-  DMARKET_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
+  // 2-minute sync interval keeps the catalog tight enough that the api's
+  // 4-minute staleness guard (MAX_LISTING_AGE_SECONDS) has ~2x buffer before
+  // it fires. Was 5min — buyers were hitting "listing_stale" on slow clicks.
+  DMARKET_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(2 * 60 * 1000),
   POLL_TRADE_STATUS_INTERVAL_MS: z.coerce.number().int().positive().default(30 * 1000),
   STRIPE_SECRET_KEY: optionalNonEmpty,
   // Whop — worker only needs these for issuing refunds. createSession is
