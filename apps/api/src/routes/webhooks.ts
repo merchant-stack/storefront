@@ -39,6 +39,23 @@ export const registerWebhookRoutes = (server: FastifyInstance): void => {
         headers: request.headers,
       });
       if (!envelope) {
+        // Diagnostic logging — print header names + signature shape so we can
+        // diff against the provider's actual delivery format when verification
+        // fails. Values are intentionally truncated to avoid logging secrets.
+        request.log.warn(
+          {
+            provider: provider.id,
+            headerNames: Object.keys(request.headers),
+            signatureHeader: shorten(headerValue(request.headers, 'webhook-signature')),
+            whopSignature: shorten(headerValue(request.headers, 'whop-signature')),
+            xWhopSignature: shorten(headerValue(request.headers, 'x-whop-signature')),
+            timestamp: headerValue(request.headers, 'webhook-timestamp'),
+            id: headerValue(request.headers, 'webhook-id'),
+            bodyLength: typeof rawBody === 'string' ? rawBody.length : rawBody.length,
+            bodyPrefix: shorten(typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8'), 200),
+          },
+          'webhook signature verification failed',
+        );
         return reply.code(400).send({ error: 'invalid_signature' });
       }
 
@@ -112,3 +129,17 @@ export const registerWebhookRoutes = (server: FastifyInstance): void => {
     },
   );
 };
+
+function headerValue(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | null {
+  const v = headers[name] ?? headers[name.toLowerCase()];
+  if (Array.isArray(v)) return v[0] ?? null;
+  return v ?? null;
+}
+
+function shorten(value: string | null, max = 80): string | null {
+  if (!value) return value;
+  return value.length <= max ? value : `${value.slice(0, max)}…[${value.length}]`;
+}
