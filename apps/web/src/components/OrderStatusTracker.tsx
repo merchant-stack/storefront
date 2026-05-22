@@ -135,12 +135,12 @@ export const OrderStatusTracker = ({ orderId }: Props) => {
                 : 'Waiting for Steam trade offer'
           }
           sub={
-            order.fulfilledAt
-              ? `Sent at ${new Date(order.fulfilledAt).toLocaleTimeString()} — accept it in your Steam client`
-              : order.status === 'FULFILLING'
-                ? 'Usually arrives in 1–5 minutes…'
-                : order.status === 'REFUNDED'
-                  ? 'Your payment is being returned'
+            order.status === 'REFUNDED'
+              ? 'Trade offer was not accepted in time — your payment is being returned'
+              : order.fulfilledAt && order.status === 'FULFILLED'
+                ? `Sent at ${new Date(order.fulfilledAt).toLocaleTimeString()} — accept it in your Steam client`
+                : order.status === 'FULFILLING'
+                  ? 'Usually arrives in 1–5 minutes…'
                   : undefined
           }
         />
