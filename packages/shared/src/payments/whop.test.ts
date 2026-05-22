@@ -4,24 +4,19 @@ import { createWhopProvider } from './whop.js';
 
 const CFG = {
   apiKey: 'apik_test',
-  // ws_ prefix + 32 random bytes encoded as 64 lowercase hex chars — this is
-  // the actual Whop secret shape observed in prod 2026-05-23.
+  // Whop signs with the FULL secret string (including prefix) used verbatim
+  // as the UTF-8 HMAC key — confirmed via brute-force against a real Test
+  // event 2026-05-23. Diverges from Standard Webhooks / Svix which strips
+  // the prefix and base64-decodes the rest.
   webhookSecret: 'ws_' + Buffer.from('secret-bytes-for-test-1234567890').toString('hex'),
   companyId: 'biz_test',
   productId: 'prod_test',
 };
 
 function sign(secret: string, id: string, ts: string, body: string): string {
-  const idx = secret.indexOf('_');
-  const suffix = idx === -1 ? secret : secret.slice(idx + 1);
-  let key: Buffer;
-  if (suffix.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(suffix)) {
-    key = Buffer.from(suffix, 'hex');
-  } else {
-    const b64 = Buffer.from(suffix, 'base64');
-    key = b64.length > 0 ? b64 : Buffer.from(secret, 'utf8');
-  }
-  const sig = createHmac('sha256', key).update(`${id}.${ts}.${body}`).digest('base64');
+  const sig = createHmac('sha256', Buffer.from(secret, 'utf8'))
+    .update(`${id}.${ts}.${body}`)
+    .digest('base64');
   return `v1,${sig}`;
 }
 
