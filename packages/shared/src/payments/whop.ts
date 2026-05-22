@@ -143,13 +143,31 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
       const drift = Math.abs(Math.floor(Date.now() / 1000) - tsSeconds);
       if (drift > WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS) return null;
 
-      // Standard Webhooks: signed content is "{id}.{timestamp}.{body}", HMAC
-      // is over the raw request body — never a re-serialised version.
+      // Whop's signing format diverges from Svix's reference Standard Webhooks
+      // in ways that aren't documented — secret encoding (hex vs base64) and
+      // exact signed-content layout. Try every plausible combination and
+      // accept any one that matches a signature in the header. The matching
+      // combo is logged via WHOP_VERIFY_DIAG=true so we can lock in the
+      // canonical format once we've seen real traffic.
       const rawBody = typeof input.rawBody === 'string' ? input.rawBody : input.rawBody.toString('utf8');
-      const signedContent = `${id}.${timestamp}.${rawBody}`;
 
-      const secretBytes = decodeSecret(config.webhookSecret);
-      const expected = createHmac('sha256', secretBytes).update(signedContent).digest('base64');
+      const secretSuffix = config.webhookSecret.includes('_')
+        ? config.webhookSecret.slice(config.webhookSecret.indexOf('_') + 1)
+        : config.webhookSecret;
+      const secretCandidates: Array<{ name: string; bytes: Buffer }> = [];
+      if (secretSuffix.length > 0 && secretSuffix.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(secretSuffix)) {
+        secretCandidates.push({ name: 'hex(suffix)', bytes: Buffer.from(secretSuffix, 'hex') });
+      }
+      secretCandidates.push({ name: 'base64(suffix)', bytes: Buffer.from(secretSuffix, 'base64') });
+      secretCandidates.push({ name: 'utf8(suffix)', bytes: Buffer.from(secretSuffix, 'utf8') });
+      secretCandidates.push({ name: 'utf8(full)', bytes: Buffer.from(config.webhookSecret, 'utf8') });
+
+      const signedContentCandidates: Array<{ name: string; content: string }> = [
+        { name: 'id.ts.body', content: `${id}.${timestamp}.${rawBody}` },
+        { name: 'ts.body', content: `${timestamp}.${rawBody}` },
+        { name: 'body', content: rawBody },
+        { name: 'ts.id.body', content: `${timestamp}.${id}.${rawBody}` },
+      ];
 
       // The header may contain multiple space-separated "vN,<sig>" pairs to
       // support secret rotation. Accept any matching v1 signature.
@@ -160,12 +178,50 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
         .map((s) => s.slice(3));
       if (candidates.length === 0) return null;
 
-      const expectedBuf = Buffer.from(expected, 'base64');
-      const valid = candidates.some((c) => {
-        const got = Buffer.from(c, 'base64');
-        return got.length === expectedBuf.length && timingSafeEqual(got, expectedBuf);
-      });
-      if (!valid) return null;
+      const expectedBufs = candidates.map((c) => Buffer.from(c, 'base64'));
+
+      let matchedSecret: string | null = null;
+      let matchedContent: string | null = null;
+      for (const sk of secretCandidates) {
+        for (const sc of signedContentCandidates) {
+          const got = createHmac('sha256', sk.bytes).update(sc.content).digest();
+          for (const exp of expectedBufs) {
+            if (got.length === exp.length && timingSafeEqual(got, exp)) {
+              matchedSecret = sk.name;
+              matchedContent = sc.name;
+              break;
+            }
+          }
+          if (matchedSecret) break;
+        }
+        if (matchedSecret) break;
+      }
+
+      if (!matchedSecret) {
+        // Diagnostic on failure: log what hex(suffix) + id.ts.body would have
+        // computed so we can compare against the actual signature header out
+        // of band. Truncated, no raw secret bytes leak.
+        const probeKey = secretCandidates[0]?.bytes ?? Buffer.alloc(0);
+        const probeContent = signedContentCandidates[0]?.content ?? '';
+        const probeSig = createHmac('sha256', probeKey).update(probeContent).digest('base64');
+        if (process.env.WHOP_VERIFY_DIAG === 'true') {
+          console.warn(
+            JSON.stringify({
+              msg: 'whop_verify_diag',
+              expectedSig: candidates[0],
+              probe: { strategy: 'hex.id.ts.body', computed: probeSig },
+              bodyLen: rawBody.length,
+              bodySha256First16: createHmac('sha256', Buffer.alloc(0)).update(rawBody).digest('base64').slice(0, 16),
+            }),
+          );
+        }
+        return null;
+      }
+      if (process.env.WHOP_VERIFY_DIAG === 'true') {
+        console.warn(
+          JSON.stringify({ msg: 'whop_verify_diag_match', secret: matchedSecret, content: matchedContent }),
+        );
+      }
 
       let parsed: WhopWebhookEnvelope;
       try {
@@ -302,16 +358,6 @@ function headerValue(
  * This is the verifier's single-point-of-truth for secret encoding — keep all
  * format-sniffing here so HMAC computation stays a clean one-liner.
  */
-function decodeSecret(secret: string): Buffer {
-  const idx = secret.indexOf('_');
-  const suffix = idx === -1 ? secret : secret.slice(idx + 1);
-  if (suffix.length > 0 && suffix.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(suffix)) {
-    return Buffer.from(suffix, 'hex');
-  }
-  const b64 = Buffer.from(suffix, 'base64');
-  if (b64.length > 0) return b64;
-  return Buffer.from(secret, 'utf8');
-}
 
 function extractOrderId(data: Record<string, unknown>): string | null {
   // The orderId rides on the Plan's metadata (set at createSession). The
