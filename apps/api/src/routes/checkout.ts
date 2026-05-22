@@ -34,6 +34,19 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
     const session = readSession(request);
     if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
+    // Mock-on-prod gate: when MOCK_PAYMENTS=true in production, only buyers
+    // whose SteamID64 is on MOCK_PAYMENTS_ALLOWED_STEAM_IDS may check out.
+    // Prevents anyone from "paying" with the mock provider and getting a real
+    // Waxpeer skin shipped. Outside production (dev/test) MOCK_PAYMENTS is
+    // unrestricted, as before.
+    if (
+      env.MOCK_PAYMENTS &&
+      env.NODE_ENV === 'production' &&
+      !env.MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET.has(session.sid)
+    ) {
+      return reply.code(403).send({ error: 'mock_checkout_not_allowed' });
+    }
+
     const parse = createCheckoutSchema.safeParse(request.body);
     if (!parse.success) {
       return reply.code(400).send({ error: 'invalid_body', detail: parse.error.flatten() });

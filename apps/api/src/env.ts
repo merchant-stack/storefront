@@ -40,6 +40,11 @@ const schema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // Comma-separated SteamID64 allowlist. When MOCK_PAYMENTS=true in production
+  // this MUST be non-empty: only buyers whose Steam ID is on the list can
+  // actually trigger checkout / mock-pay. Lets the founder smoke-test the live
+  // site end-to-end without exposing free skins to the world.
+  MOCK_PAYMENTS_ALLOWED_STEAM_IDS: z.string().default(''),
   DMARKET_PUBLIC_KEY: optionalNonEmpty,
   DMARKET_SECRET_KEY: optionalNonEmpty,
   DMARKET_BASE_URL: z.string().url().default('https://api.dmarket.com'),
@@ -76,8 +81,28 @@ const extraOrigins = parsed.data.CORS_EXTRA_ORIGINS
   .map((s) => s.trim())
   .filter(Boolean);
 
+const mockPaymentsAllowedSteamIds = new Set(
+  parsed.data.MOCK_PAYMENTS_ALLOWED_STEAM_IDS
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
+if (
+  parsed.data.MOCK_PAYMENTS &&
+  parsed.data.NODE_ENV === 'production' &&
+  mockPaymentsAllowedSteamIds.size === 0
+) {
+  console.error(
+    'MOCK_PAYMENTS=true in production requires MOCK_PAYMENTS_ALLOWED_STEAM_IDS to be a non-empty comma-separated list of SteamID64 values.',
+  );
+  process.exit(1);
+}
+
 export const env = {
   ...parsed.data,
   /** All origins that CORS and the CSRF origin check should accept. */
   ALLOWED_ORIGINS: [parsed.data.WEB_ORIGIN, ...extraOrigins],
+  /** Parsed MOCK_PAYMENTS_ALLOWED_STEAM_IDS as a Set for O(1) membership checks. */
+  MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET: mockPaymentsAllowedSteamIds,
 };

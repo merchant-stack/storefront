@@ -25,6 +25,17 @@ export const registerDevRoutes = (server: FastifyInstance): void => {
       void reply.code(401).send({ error: 'not_authenticated' });
       return null;
     }
+    // Mock-on-prod gate: in production the allowlist is the only thing that
+    // separates "founder smoke-testing the live site" from "anyone gets a free
+    // skin". The route handler already enforced this at checkout creation; we
+    // re-check here because /mock-pay is the privileged action.
+    if (
+      env.NODE_ENV === 'production' &&
+      !env.MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET.has(session.sid)
+    ) {
+      void reply.code(403).send({ error: 'mock_pay_not_allowed' });
+      return null;
+    }
     const parse = bodySchema.safeParse(request.body);
     if (!parse.success) {
       void reply.code(400).send({ error: 'invalid_body' });

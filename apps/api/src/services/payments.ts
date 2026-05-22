@@ -18,8 +18,17 @@ import { env } from '../env.js';
 let registry: PaymentRegistry | null = null;
 export const getPaymentRegistry = (): PaymentRegistry => {
   if (!registry) {
-    if (env.MOCK_PAYMENTS && env.NODE_ENV === 'production') {
-      throw new Error('MOCK_PAYMENTS must not be true in production');
+    // Defense-in-depth: env.ts already exits on boot if MOCK_PAYMENTS=true in
+    // production without a non-empty allowlist. Re-check here so any future
+    // code path that constructs the registry directly still fails closed.
+    if (
+      env.MOCK_PAYMENTS &&
+      env.NODE_ENV === 'production' &&
+      env.MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET.size === 0
+    ) {
+      throw new Error(
+        'MOCK_PAYMENTS=true in production requires MOCK_PAYMENTS_ALLOWED_STEAM_IDS',
+      );
     }
     registry = createPaymentRegistry({
       webOrigin: env.WEB_ORIGIN,
