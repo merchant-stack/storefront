@@ -20,6 +20,7 @@ packages/db/prisma/migrations/dev.db*
 
 # Logs
 *.log
+logs.txt
 npm-debug.log*
 pnpm-debug.log*
 logs/
