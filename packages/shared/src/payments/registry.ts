@@ -12,6 +12,7 @@
 
 import { createMockProvider, type MockProviderConfig } from './mock.js';
 import { createStripeProvider, type StripeProviderConfig } from './stripe.js';
+import { createWhopProvider, type WhopProviderConfig } from './whop.js';
 import type { PaymentProvider, PaymentProviderId } from './types.js';
 
 export interface RegistryConfig {
@@ -20,6 +21,7 @@ export interface RegistryConfig {
   /** When true, replaces real providers with the mock one. Dev-only. */
   mockPayments: boolean;
   stripe: StripeProviderConfig;
+  whop: WhopProviderConfig;
   // Add future providers here, e.g.:
   // nowpayments: NowpaymentsProviderConfig;
   // coinbaseCommerce: CoinbaseCommerceProviderConfig;
@@ -47,6 +49,7 @@ export function createPaymentRegistry(config: RegistryConfig): PaymentRegistry {
     providers.set('STRIPE', createMockProvider(mockConfig));
   } else {
     providers.set('STRIPE', createStripeProvider(config.stripe));
+    providers.set('WHOP', createWhopProvider(config.whop));
     // Register additional providers here as they are added, e.g.:
     // providers.set('NOWPAYMENTS', createNowpaymentsProvider(config.nowpayments));
   }

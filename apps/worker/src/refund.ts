@@ -21,6 +21,16 @@ const getRegistry = (): PaymentRegistry => {
         secretKey: env.STRIPE_SECRET_KEY,
         webhookSecret: undefined, // worker never verifies webhooks
       },
+      whop: {
+        apiKey: env.WHOP_API_KEY,
+        // Worker doesn't verify webhooks — feed the secret anyway so isEnabled()
+        // is consistent with the api side. Otherwise refunds would silently
+        // bypass the Whop provider just because the secret happens not to be
+        // read by this process.
+        webhookSecret: env.WHOP_WEBHOOK_SECRET,
+        companyId: env.WHOP_COMPANY_ID,
+        productId: env.WHOP_PRODUCT_ID,
+      },
     });
   }
   return registry;

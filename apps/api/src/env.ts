@@ -41,6 +41,14 @@ const schema = z.object({
   STEAM_API_KEY: optionalNonEmpty,
   STRIPE_SECRET_KEY: optionalNonEmpty,
   STRIPE_WEBHOOK_SECRET: optionalNonEmpty,
+  // Whop (card / Apple Pay / Google Pay). All four required for the provider
+  // to register as enabled in the registry — without any one the api boot
+  // still succeeds (so we can deploy code without keys) but the provider
+  // refuses session creation.
+  WHOP_API_KEY: optionalNonEmpty,
+  WHOP_WEBHOOK_SECRET: optionalNonEmpty,
+  WHOP_COMPANY_ID: optionalNonEmpty,
+  WHOP_PRODUCT_ID: optionalNonEmpty,
   // Bearer token required by Prometheus to scrape /metrics. When unset in
   // production /metrics responds 404 (so attackers can't even tell it exists);
   // a scraper provides `Authorization: Bearer <token>`. Generate with

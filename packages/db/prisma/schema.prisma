@@ -261,6 +261,7 @@ enum PaymentProvider {
   STRIPE
   NOWPAYMENTS
   COINBASE_COMMERCE
+  WHOP
 }
 
 enum PaymentStatus {

@@ -31,6 +31,13 @@ const schema = z.object({
   DMARKET_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   POLL_TRADE_STATUS_INTERVAL_MS: z.coerce.number().int().positive().default(30 * 1000),
   STRIPE_SECRET_KEY: optionalNonEmpty,
+  // Whop — worker only needs these for issuing refunds. createSession is
+  // api-side. Keep parity with apps/api/src/env.ts so a leaked-half deploy
+  // doesn't silently break refunds.
+  WHOP_API_KEY: optionalNonEmpty,
+  WHOP_WEBHOOK_SECRET: optionalNonEmpty,
+  WHOP_COMPANY_ID: optionalNonEmpty,
+  WHOP_PRODUCT_ID: optionalNonEmpty,
   MOCK_PAYMENTS: z
     .enum(['true', 'false'])
     .default('false')

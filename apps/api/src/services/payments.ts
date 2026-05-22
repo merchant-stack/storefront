@@ -37,6 +37,12 @@ export const getPaymentRegistry = (): PaymentRegistry => {
         secretKey: env.STRIPE_SECRET_KEY,
         webhookSecret: env.STRIPE_WEBHOOK_SECRET,
       },
+      whop: {
+        apiKey: env.WHOP_API_KEY,
+        webhookSecret: env.WHOP_WEBHOOK_SECRET,
+        companyId: env.WHOP_COMPANY_ID,
+        productId: env.WHOP_PRODUCT_ID,
+      },
     });
   }
   return registry;

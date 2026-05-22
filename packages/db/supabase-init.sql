@@ -46,7 +46,7 @@ CREATE TYPE "PriceSource" AS ENUM ('STEAM_MARKET', 'CUSTOM', 'EXTERNAL_API');
 CREATE TYPE "ListingStatus" AS ENUM ('ACTIVE', 'RESERVED', 'SOLD', 'CANCELLED', 'EXPIRED');
 CREATE TYPE "MerchantStatus" AS ENUM ('ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION');
 CREATE TYPE "OrderStatus" AS ENUM ('PENDING_PAYMENT', 'PAID', 'FULFILLING', 'FULFILLED', 'FAILED', 'CANCELLED', 'REFUNDED');
-CREATE TYPE "PaymentProvider" AS ENUM ('STRIPE', 'NOWPAYMENTS', 'COINBASE_COMMERCE');
+CREATE TYPE "PaymentProvider" AS ENUM ('STRIPE', 'NOWPAYMENTS', 'COINBASE_COMMERCE', 'WHOP');
 CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'REQUIRES_ACTION', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'REFUNDED');
 CREATE TYPE "TradeStatus" AS ENUM ('QUEUED', 'SENDING', 'SENT', 'ACCEPTED', 'DECLINED', 'CANCELLED', 'EXPIRED', 'ESCROW', 'INVALID', 'FAILED');
 CREATE TYPE "ActorType" AS ENUM ('USER', 'SYSTEM', 'ADMIN', 'MERCHANT');
@@ -391,3 +391,10 @@ ALTER TYPE "SourceProvider" ADD VALUE IF NOT EXISTS 'WAXPEER';
 INSERT INTO "Merchant" (id, name, "isInternal", status, "settlementCurrency", "createdAt", "updatedAt")
 VALUES ('internal-merchant', 'RustSupply Marketplace', true, 'ACTIVE', 'USD', now(), now())
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- Migration 20260523000000_payment_provider_whop
+-- Idempotent — safe to re-run against an already-initialised DB.
+-- ============================================================================
+
+ALTER TYPE "PaymentProvider" ADD VALUE IF NOT EXISTS 'WHOP';
