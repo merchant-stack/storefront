@@ -95,3 +95,45 @@ describe('checkTradeStatuses (live shape)', () => {
     expect(calledUrl).toContain('id=101');
   });
 });
+
+describe('searchItems cross-game filter', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function mockItemsResponse(items: unknown[]): void {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response(JSON.stringify({ success: true, items }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
+
+  it('drops CS2 items leaking into a rust query', async () => {
+    mockItemsResponse([
+      { item_id: '1', name: 'Whiteout Kilt', price: 200 },
+      { item_id: '2', name: 'StatTrak™ P2000 | Lifted Spirits (Minimal Wear)', price: 227 },
+      { item_id: '3', name: 'AK-47 | Redline (Field-Tested)', price: 5000 },
+      { item_id: '4', name: '★ Karambit | Doppler (Factory New)', price: 100000 },
+      { item_id: '5', name: 'Panda Rug', price: 88 },
+    ]);
+    const client = createWaxpeerClient({ apiKey: 'k' });
+    const offers = await client.searchItems({ gameId: 'rust' });
+    expect(offers.map((o) => o.itemId)).toEqual(['1', '5']);
+  });
+
+  it('keeps CS2 items when explicitly requesting csgo', async () => {
+    mockItemsResponse([
+      { item_id: '2', name: 'StatTrak™ P2000 | Lifted Spirits (Minimal Wear)', price: 227 },
+    ]);
+    const client = createWaxpeerClient({ apiKey: 'k' });
+    const offers = await client.searchItems({ gameId: 'csgo' });
+    expect(offers.map((o) => o.itemId)).toEqual(['2']);
+  });
+});

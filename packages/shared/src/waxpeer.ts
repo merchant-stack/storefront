@@ -203,7 +203,12 @@ export function createWaxpeerClient(config: WaxpeerClientConfig): WaxpeerClient 
       if (!body.success) {
         throw new Error(`Waxpeer search failed: ${body.msg ?? 'unknown'}`);
       }
-      return (body.items ?? []).map(normaliseOffer).filter((o): o is WaxpeerOffer => o !== null);
+      const rawItems = body.items ?? [];
+      const requestedGame = options.gameId ?? 'rust';
+      return rawItems
+        .filter((o) => !isCrossGameContamination(o, requestedGame))
+        .map(normaliseOffer)
+        .filter((o): o is WaxpeerOffer => o !== null);
     },
 
     async buyOffer(itemId, expectedPriceMinor, tradeUrl) {
@@ -312,6 +317,26 @@ function normaliseDeliveryState(status: number | undefined): WaxpeerDeliveryStat
 }
 
 // ---------- internals ----------
+
+/**
+ * Waxpeer's `/v1/get-items-list?game=rust` occasionally returns CS2 (or other
+ * non-Rust) items because some sellers mis-tag their listings on Waxpeer's
+ * side. Detect by name signatures unique to CS2:
+ *   - "StatTrak™" prefix (CS2 / TF2 only — Rust skins never have it).
+ *   - "★" marker (CS2 knives and gloves).
+ *   - CS2 wear descriptor suffix in parentheses, e.g. "… (Minimal Wear)".
+ * Rust item names ("Whiteout Kilt", "Panda Rug", "Cow Moo Flage Hoodie") never
+ * match any of these.
+ */
+function isCrossGameContamination(o: WaxpeerRawOffer, requestedGame: string): boolean {
+  if (requestedGame !== 'rust') return false;
+  const name = o.name ?? '';
+  if (!name) return false;
+  if (name.includes('StatTrak™')) return true;
+  if (name.includes('★')) return true; // ★
+  if (/\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)\s*$/.test(name)) return true;
+  return false;
+}
 
 function normaliseOffer(o: WaxpeerRawOffer): WaxpeerOffer | null {
   if (!o.item_id || typeof o.price !== 'number') return null;
