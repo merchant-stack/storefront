@@ -14,7 +14,7 @@ export const registerAccountRoutes = (server: FastifyInstance): void => {
     '/api/me/trade-url',
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     async (request, reply) => {
-      const session = readSession(request);
+      const session = await readSession(request);
       if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
       const parse = tradeUrlSchema.safeParse(request.body);
@@ -22,13 +22,13 @@ export const registerAccountRoutes = (server: FastifyInstance): void => {
         return reply.code(400).send({ error: 'invalid_body', detail: parse.error.flatten() });
       }
 
-      const candidate = parseTradeUrlSteamId64(parse.data.tradeUrl);
-      if (!candidate) {
+      const parsed = parseTradeUrlSteamId64(parse.data.tradeUrl);
+      if (!parsed) {
         return reply.code(400).send({ error: 'invalid_trade_url' });
       }
-      if (candidate !== session.sid) {
+      if (parsed.steamId64 !== session.sid) {
         request.log.warn(
-          { sessionSteamId: session.sid, tradeUrlSteamId: candidate },
+          { sessionSteamId: session.sid, tradeUrlSteamId: parsed.steamId64 },
           'trade url ownership mismatch',
         );
         return reply.code(403).send({ error: 'trade_url_not_owned' });
@@ -39,9 +39,12 @@ export const registerAccountRoutes = (server: FastifyInstance): void => {
         select: { tradeUrl: true },
       });
 
+      // Store the canonical form, never raw user input. Drops any unknown
+      // query params and forces https. Downstream consumers (Waxpeer, audit
+      // logs) get a known-shape URL.
       const user = await prisma.user.update({
         where: { id: session.sub },
-        data: { tradeUrl: parse.data.tradeUrl },
+        data: { tradeUrl: parsed.canonical },
         select: { id: true, tradeUrl: true },
       });
 

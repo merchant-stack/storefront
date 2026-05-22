@@ -28,6 +28,11 @@ const schema = z.object({
   // used for OAuth redirects and Stripe success/cancel URLs.
   CORS_EXTRA_ORIGINS: z.string().default(''),
   COOKIE_SECRET: z.string().min(32),
+  // Separate from COOKIE_SECRET so signed cookies and JWTs don't share the same
+  // HMAC key. Required (no default) to force the operator to pick something
+  // distinct. Generate with:
+  //   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+  JWT_SECRET: z.string().min(32),
   // Session cookie SameSite policy. Use 'lax' (default) when web and api share
   // a registrable domain in prod (e.g. rustskinpay.com + api.rustskinpay.com).
   // Use 'none' if they are on entirely different domains; browsers require
@@ -36,6 +41,11 @@ const schema = z.object({
   STEAM_API_KEY: optionalNonEmpty,
   STRIPE_SECRET_KEY: optionalNonEmpty,
   STRIPE_WEBHOOK_SECRET: optionalNonEmpty,
+  // Bearer token required by Prometheus to scrape /metrics. When unset in
+  // production /metrics responds 404 (so attackers can't even tell it exists);
+  // a scraper provides `Authorization: Bearer <token>`. Generate with
+  // `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+  METRICS_BEARER_TOKEN: optionalNonEmpty,
   MOCK_PAYMENTS: z
     .enum(['true', 'false'])
     .default('false')

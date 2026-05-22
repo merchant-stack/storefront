@@ -27,7 +27,7 @@ export const registerAuthRoutes = (server: FastifyInstance): void => {
   server.get('/auth/steam/callback', authLimit, async (request, reply) => {
     const query = request.query as Record<string, string | string[] | undefined>;
 
-    const steamId64 = await verifySteamOpenId(query);
+    const steamId64 = await verifySteamOpenId(query, `${apiOrigin()}/auth/steam/callback`);
     if (!steamId64) {
       return reply.redirect(`${env.WEB_ORIGIN}/?auth_error=invalid_openid`);
     }
@@ -49,7 +49,7 @@ export const registerAuthRoutes = (server: FastifyInstance): void => {
       },
     });
 
-    setSessionCookie(reply, { sub: user.id, sid: steamId64 }, env.NODE_ENV === 'production');
+    await setSessionCookie(reply, { sub: user.id, sid: steamId64 }, env.NODE_ENV === 'production');
 
     await audit(
       {
@@ -66,13 +66,13 @@ export const registerAuthRoutes = (server: FastifyInstance): void => {
     return reply.redirect(env.WEB_ORIGIN);
   });
 
-  server.post('/auth/logout', authLimit, async (_request, reply) => {
-    clearSessionCookie(reply);
+  server.post('/auth/logout', authLimit, async (request, reply) => {
+    await clearSessionCookie(request, reply);
     return { ok: true };
   });
 
-  server.get('/auth/me', async (request, reply) => {
-    const session = readSession(request);
+  server.get('/auth/me', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+    const session = await readSession(request);
     if (!session) {
       return reply.code(401).send({ error: 'not_authenticated' });
     }
@@ -91,7 +91,7 @@ export const registerAuthRoutes = (server: FastifyInstance): void => {
     });
 
     if (!user) {
-      clearSessionCookie(reply);
+      await clearSessionCookie(request, reply);
       return reply.code(401).send({ error: 'user_not_found' });
     }
 

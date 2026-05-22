@@ -55,12 +55,21 @@ const STEAM_ID_REGEX = /^https?:\/\/steamcommunity\.com\/openid\/id\/(\d{17})$/;
  */
 export const verifySteamOpenId = async (
   query: Record<string, string | string[] | undefined>,
+  expectedReturnTo: string,
 ): Promise<string | null> => {
   const mode = query['openid.mode'];
   if (mode !== 'id_res') return null;
 
   const claimedId = query['openid.claimed_id'];
   if (typeof claimedId !== 'string') return null;
+
+  // Defense-in-depth: refuse assertions issued for a different realm/return_to.
+  // Steam's check_authentication step authoritatively validates the signature,
+  // but binding return_to + identity to our expected values prevents a hostile
+  // site from harvesting a valid Steam assertion for their realm and replaying
+  // it at ours within the nonce TTL.
+  if (query['openid.return_to'] !== expectedReturnTo) return null;
+  if (query['openid.identity'] !== claimedId) return null;
 
   const match = STEAM_ID_REGEX.exec(claimedId);
   if (!match || !match[1]) return null;

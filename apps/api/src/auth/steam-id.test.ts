@@ -5,13 +5,26 @@ describe('parseTradeUrlSteamId64', () => {
   it('accepts a valid trade URL and reconstructs SteamID64', () => {
     // partner=1 ⇒ SteamID64 = 76561197960265728 + 1
     const url = 'https://steamcommunity.com/tradeoffer/new/?partner=1&token=abcDEF12';
-    expect(parseTradeUrlSteamId64(url)).toBe((STEAMID_BASE + 1n).toString());
+    const result = parseTradeUrlSteamId64(url);
+    expect(result?.steamId64).toBe((STEAMID_BASE + 1n).toString());
+    expect(result?.canonical).toBe(url);
   });
 
   it('reconstructs a realistic SteamID64', () => {
     // Sample real-world Steam Account ID 425832834 → SteamID64 76561198386098562.
     const url = 'https://steamcommunity.com/tradeoffer/new/?partner=425832834&token=KaiX_Ab9';
-    expect(parseTradeUrlSteamId64(url)).toBe('76561198386098562');
+    const result = parseTradeUrlSteamId64(url);
+    expect(result?.steamId64).toBe('76561198386098562');
+    expect(result?.canonical).toBe(url);
+  });
+
+  it('strips extra query params in the canonical form', () => {
+    // User may paste a URL with extra params (e.g. utm_source from Steam emails).
+    // We must drop them so downstream consumers see only the known fields.
+    const input =
+      'https://steamcommunity.com/tradeoffer/new/?partner=1&token=abc&extra=evil&utm_source=ad';
+    const result = parseTradeUrlSteamId64(input);
+    expect(result?.canonical).toBe('https://steamcommunity.com/tradeoffer/new/?partner=1&token=abc');
   });
 
   it('rejects non-Steam hostnames', () => {
@@ -55,13 +68,11 @@ describe('parseTradeUrlSteamId64', () => {
     expect(parseTradeUrlSteamId64('')).toBeNull();
   });
 
-  it('refuses http (cookie/credential leakage)', () => {
-    // The Steam trade URL is only ever served over HTTPS by Steam — a http://
-    // input would either be a typo or an attacker-controlled MITM bait. We
-    // still accept it since the hostname is what really matters; the worker
-    // will fetch via HTTPS regardless. (Documenting current behaviour.)
-    // If we ever decide to refuse http, add an assertion here.
-    const url = 'http://steamcommunity.com/tradeoffer/new/?partner=1&token=x';
-    expect(parseTradeUrlSteamId64(url)).toBe((STEAMID_BASE + 1n).toString());
+  it('rejects http (only https accepted)', () => {
+    // Steam serves trade URLs only over HTTPS — a http:// input is either a
+    // typo or attacker-controlled MITM bait. Refused outright.
+    expect(
+      parseTradeUrlSteamId64('http://steamcommunity.com/tradeoffer/new/?partner=1&token=x'),
+    ).toBeNull();
   });
 });

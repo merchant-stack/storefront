@@ -20,7 +20,7 @@ export const registerDevRoutes = (server: FastifyInstance): void => {
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<{ orderId: string } | null> => {
-    const session = readSession(request);
+    const session = await readSession(request);
     if (!session) {
       void reply.code(401).send({ error: 'not_authenticated' });
       return null;

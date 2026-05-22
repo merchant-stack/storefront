@@ -49,6 +49,10 @@ export interface CreateSessionInput {
   description: string;
   imageUrl?: string;
   buyerEmail?: string;
+  /** SteamID64 of the authenticated buyer — required so the mock-on-prod
+   * allowlist can be enforced as defense-in-depth, in case any future caller
+   * skips the route-level check. */
+  buyerSteamId: string;
   /** Force a specific provider; otherwise the registry default is used. */
   providerId?: PaymentProviderId;
 }
@@ -79,6 +83,18 @@ const resolveProvider = (providerId?: PaymentProviderId): ProviderImpl | null =>
 export const createPaymentSession = async (
   input: CreateSessionInput,
 ): Promise<CreateSessionResult | null> => {
+  // Defense-in-depth: even though the checkout route already gates, re-check
+  // here so any future caller (admin tools, retry helpers, scheduled re-bills)
+  // also fails closed when mock-on-prod is active and the caller is not on the
+  // allowlist.
+  if (
+    env.MOCK_PAYMENTS &&
+    env.NODE_ENV === 'production' &&
+    !env.MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET.has(input.buyerSteamId)
+  ) {
+    return null;
+  }
+
   const provider = resolveProvider(input.providerId);
   if (!provider) return null;
 
@@ -164,10 +180,16 @@ export const finalizeOrderPayment = async (
       }
     }
 
-    await tx.order.update({
-      where: { id: input.orderId },
+    // Race-safe state transition: only PENDING_PAYMENT → PAID succeeds. If a
+    // concurrent webhook delivery already flipped the row (Stripe retry
+    // overlapping the original, or two interpreted events for the same order),
+    // the updateMany count is 0 and we must NOT enqueue buyAndDispatch again —
+    // otherwise the worker buys the item from Waxpeer twice.
+    const flipped = await tx.order.updateMany({
+      where: { id: input.orderId, status: 'PENDING_PAYMENT' },
       data: { status: 'PAID', paidAt: new Date() },
     });
+    if (flipped.count === 0) return false;
 
     return Boolean(order.buyer?.tradeUrl);
   });

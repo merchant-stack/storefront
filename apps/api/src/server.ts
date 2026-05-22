@@ -86,7 +86,13 @@ export const buildServer = (): FastifyInstance => {
     credentials: true,
   });
   void server.register(cookie, { secret: env.COOKIE_SECRET });
-  void server.register(jwt, { secret: env.COOKIE_SECRET });
+  // JWT uses its own secret + binds aud/iss so a token signed for another
+  // service (or with a leaked cookie secret) cannot be replayed against us.
+  void server.register(jwt, {
+    secret: env.JWT_SECRET,
+    sign: { aud: 'rustsupply-session', iss: env.API_ORIGIN },
+    verify: { allowedAud: 'rustsupply-session', allowedIss: env.API_ORIGIN },
+  });
   void server.register(rawBody, {
     field: 'rawBody',
     global: false,
@@ -134,10 +140,21 @@ export const buildServer = (): FastifyInstance => {
 
   server.get('/health', () => ({ ok: true, service: 'rustskinpay-api' }));
 
-  // Prometheus metrics endpoint. Public path (scrapers can't auth easily) — but
-  // we don't expose anything sensitive: counts + histograms only. Behind WAF /
-  // private network in prod is even better.
-  server.get('/metrics', async (_request, reply) => {
+  // Prometheus metrics endpoint. Gated by a bearer token so scrapers can hit
+  // it without exposing business signal (revenue, traffic spikes, error rates)
+  // to the public web. When METRICS_BEARER_TOKEN is unset in production the
+  // endpoint 404s — so an attacker can't tell metrics exist at all.
+  server.get('/metrics', async (request, reply) => {
+    if (env.NODE_ENV === 'production') {
+      if (!env.METRICS_BEARER_TOKEN) {
+        return reply.code(404).send();
+      }
+      const auth = request.headers.authorization;
+      const expected = `Bearer ${env.METRICS_BEARER_TOKEN}`;
+      if (typeof auth !== 'string' || auth !== expected) {
+        return reply.code(404).send();
+      }
+    }
     reply.header('Content-Type', registry.contentType);
     return registry.metrics();
   });

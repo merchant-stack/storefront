@@ -31,7 +31,7 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
       return reply.code(503).send({ error: 'sales_not_active' });
     }
 
-    const session = readSession(request);
+    const session = await readSession(request);
     if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
     // Mock-on-prod gate: when MOCK_PAYMENTS=true in production, only buyers
@@ -58,6 +58,9 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
     // creating a duplicate. Key is scoped per-user via session.sub.
     const idempotencyHeader = request.headers['idempotency-key'];
     const rawKey = Array.isArray(idempotencyHeader) ? idempotencyHeader[0] : idempotencyHeader;
+    if (rawKey && rawKey.length > 128) {
+      return reply.code(400).send({ error: 'idempotency_key_too_long' });
+    }
     const idempotencyKey = rawKey ? `${session.sub}:${rawKey}` : null;
     if (idempotencyKey) {
       const existing = await prisma.order.findUnique({
@@ -144,13 +147,17 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
       currency: created.order.currency,
       description: created.item.displayName,
       imageUrl: created.item.iconUrl ?? undefined,
+      buyerSteamId: session.sid,
       providerId,
     });
 
     if (!result) {
+      // Clear the idempotency key on FAILED so the buyer can retry the same
+      // logical action with the same key — otherwise they get permanently
+      // bricked on that key (rare but real if the provider blips).
       await prisma.order.update({
         where: { id: created.order.id },
-        data: { status: 'FAILED', cancelledAt: new Date() },
+        data: { status: 'FAILED', cancelledAt: new Date(), idempotencyKey: null },
       });
       return reply.code(503).send({ error: 'payment_provider_unavailable' });
     }
@@ -162,7 +169,7 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
   });
 
   server.get('/api/orders/:id', async (request, reply) => {
-    const session = readSession(request);
+    const session = await readSession(request);
     if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
     const { id } = request.params as { id: string };
@@ -214,7 +221,7 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
   });
 
   server.get('/api/me/orders', async (request, reply) => {
-    const session = readSession(request);
+    const session = await readSession(request);
     if (!session) return reply.code(401).send({ error: 'not_authenticated' });
 
     const parse = listOrdersQuerySchema.safeParse(request.query);
