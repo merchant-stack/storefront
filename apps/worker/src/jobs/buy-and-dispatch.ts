@@ -64,10 +64,53 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
   // 2. Buy on source — route to the provider that listed the item.
   log.info({ orderId, provider: tx.provider, sourceOfferId: tx.sourceOfferId }, 'buying on source');
   const expectedPriceMinor = tx.amountSpentMinor ?? 0;
+
+  // For Waxpeer, sample the wallet balance BEFORE the buy attempt so we can
+  // detect false-negative buy responses: their P2P API sometimes returns
+  // `success:false` ("Item no longer available" / "Item price has increased")
+  // but the seller's bot still delivers the trade and Waxpeer charges us. In
+  // that case the wallet drops by ~item price — we use that as the source of
+  // truth instead of trusting the response. Without this guard we
+  // double-lose: pay Waxpeer, refund the buyer.
+  const balanceBefore =
+    tx.provider === 'WAXPEER' && !waxpeer.isMock()
+      ? await waxpeer.getBalance().catch(() => null)
+      : null;
+
   const buy =
     tx.provider === 'WAXPEER'
       ? await waxpeer.buyOffer(tx.sourceOfferId, expectedPriceMinor, order.buyer.tradeUrl)
       : await dmarket.buyOffer(tx.sourceOfferId, expectedPriceMinor);
+
+  if (!buy.success) {
+    // Waxpeer false-negative check: wait a bit for the wallet to settle, then
+    // compare against the pre-buy balance. If they charged us, the buy went
+    // through despite the negative response.
+    if (tx.provider === 'WAXPEER' && balanceBefore) {
+      log.warn(
+        { orderId, errorMessage: buy.errorMessage, balanceBefore: balanceBefore.usdMinor },
+        'waxpeer buy returned failure — sampling balance to detect false-negative',
+      );
+      await new Promise((r) => setTimeout(r, 8_000));
+      const balanceAfter = await waxpeer.getBalance().catch(() => null);
+      if (balanceAfter) {
+        const delta = balanceBefore.usdMinor - balanceAfter.usdMinor;
+        // Charged within ±10% of expected → treat as successful buy.
+        const tolerance = Math.max(2, Math.floor(expectedPriceMinor * 0.1));
+        const charged = delta >= expectedPriceMinor - tolerance && delta <= expectedPriceMinor + tolerance;
+        if (charged) {
+          log.warn(
+            { orderId, balanceBefore: balanceBefore.usdMinor, balanceAfter: balanceAfter.usdMinor, delta },
+            'waxpeer reported failure but charged the wallet — treating buy as successful',
+          );
+          // Override into the success path below.
+          buy.success = true;
+          buy.sourcePaymentId = buy.sourcePaymentId ?? `recovered_${Date.now()}`;
+          buy.raw = { ...((buy.raw as object) ?? {}), reconciledFromBalance: true, delta };
+        }
+      }
+    }
+  }
 
   if (!buy.success) {
     log.error({ orderId, errorCode: buy.errorCode, errorMessage: buy.errorMessage }, 'source buy failed');
