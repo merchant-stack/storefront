@@ -6,14 +6,18 @@ import {
   TRADE_DISPATCH_QUEUE,
   DMARKET_SYNC_QUEUE,
   BUY_AND_DISPATCH_QUEUE,
+  POLL_TRADE_STATUS_QUEUE,
   dmarketSyncQueue,
+  pollTradeStatusQueue,
   type TradeDispatchJob,
   type SyncDMarketJobData,
   type BuyAndDispatchJobData,
+  type PollTradeStatusJobData,
 } from './queue.js';
 import { dispatchTrade } from './jobs/dispatch-trade.js';
 import { syncDMarket } from './jobs/sync-dmarket.js';
 import { buyAndDispatch } from './jobs/buy-and-dispatch.js';
+import { pollTradeStatus } from './jobs/poll-trade-status.js';
 import { jobsProcessed, startHealthServer, stopHealthServer } from './health-server.js';
 
 const log = pino({
@@ -54,7 +58,18 @@ const buyAndDispatchWorker = new Worker<BuyAndDispatchJobData>(
   { connection, concurrency: 2 },
 );
 
-for (const w of [tradeWorker, dmarketSyncWorker, buyAndDispatchWorker]) {
+// Single-instance worker — a polling tick reads the same Trade rows, so we
+// don't want parallel processors fighting over them. Updates are race-safe
+// (conditional updateMany) but parallelism would burn Waxpeer API calls.
+const pollTradeStatusWorker = new Worker<PollTradeStatusJobData>(
+  POLL_TRADE_STATUS_QUEUE,
+  async (job) => {
+    await pollTradeStatus(job);
+  },
+  { connection, concurrency: 1 },
+);
+
+for (const w of [tradeWorker, dmarketSyncWorker, buyAndDispatchWorker, pollTradeStatusWorker]) {
   w.on('completed', (job) => {
     log.info({ queue: w.name, jobId: job.id }, 'job completed');
     jobsProcessed.inc({ queue: w.name, outcome: 'success' });
@@ -112,6 +127,22 @@ async function scheduleRecurring(): Promise<void> {
       { removeOnComplete: true, removeOnFail: 10 },
     );
     log.info({ intervalMs: env.DMARKET_SYNC_INTERVAL_MS }, 'dmarket sync scheduled');
+
+    const pollRepeatables = await pollTradeStatusQueue.getRepeatableJobs();
+    for (const r of pollRepeatables) {
+      await pollTradeStatusQueue.removeRepeatableByKey(r.key);
+    }
+    await pollTradeStatusQueue.add(
+      'tick',
+      {},
+      {
+        repeat: { every: env.POLL_TRADE_STATUS_INTERVAL_MS },
+        jobId: 'poll-trade-status-recurring',
+        removeOnComplete: 50,
+        removeOnFail: 50,
+      },
+    );
+    log.info({ intervalMs: env.POLL_TRADE_STATUS_INTERVAL_MS }, 'poll-trade-status scheduled');
   } finally {
     // Drop the lock only if we still own it (TTL would clear it anyway on
     // crash). Best-effort: any failure here is harmless because the TTL is
@@ -132,6 +163,7 @@ const shutdown = async (signal: string): Promise<void> => {
     tradeWorker.close(),
     dmarketSyncWorker.close(),
     buyAndDispatchWorker.close(),
+    pollTradeStatusWorker.close(),
   ]);
   await connection.quit();
   process.exit(0);

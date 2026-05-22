@@ -5,6 +5,7 @@ import { env } from './env.js';
 export const TRADE_DISPATCH_QUEUE = 'trade-dispatch';
 export const DMARKET_SYNC_QUEUE = 'dmarket-sync';
 export const BUY_AND_DISPATCH_QUEUE = 'buy-and-dispatch';
+export const POLL_TRADE_STATUS_QUEUE = 'poll-trade-status';
 
 export interface TradeDispatchJob {
   tradeId: string;
@@ -19,6 +20,8 @@ export interface BuyAndDispatchJobData {
   orderId: string;
 }
 
+export type PollTradeStatusJobData = Record<string, never>;
+
 export const queueConnection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
@@ -32,5 +35,9 @@ export const dmarketSyncQueue = new Queue<SyncDMarketJobData>(DMARKET_SYNC_QUEUE
 });
 
 export const buyAndDispatchQueue = new Queue<BuyAndDispatchJobData>(BUY_AND_DISPATCH_QUEUE, {
+  connection: queueConnection,
+});
+
+export const pollTradeStatusQueue = new Queue<PollTradeStatusJobData>(POLL_TRADE_STATUS_QUEUE, {
   connection: queueConnection,
 });

@@ -2,9 +2,13 @@
 //
 // Two delivery models depending on provider:
 //   - WAXPEER: P2P. We pass the buyer's trade URL to buy-one-p2p; Waxpeer's
-//     seller bot sends the Steam trade offer directly to the buyer. We mark
-//     the Order FULFILLED on a successful API response. No Trade row, no
-//     own-bot dispatch.
+//     seller bot sends the Steam trade offer directly to the buyer. The
+//     buy-one-p2p response only acknowledges that Waxpeer queued the P2P
+//     request — actual seller-bot dispatch + buyer-side delivery are async
+//     and can fail silently. So on success we transition the Order to
+//     FULFILLING and the Trade to SENDING, then let the poll-trade-status
+//     worker watch /v1/check-many-steam and promote to FULFILLED only when
+//     Waxpeer confirms the trade was actually sent.
 //   - DMARKET (legacy / unused): item is delivered to OUR bot inventory.
 //     We then create a Trade row and enqueue dispatch-trade so our bot
 //     re-sends the item to the buyer.
@@ -141,11 +145,11 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
   });
 
   if (tx.provider === 'WAXPEER') {
-    // P2P delivery: Waxpeer's seller bot sends the Steam trade offer directly
-    // to the buyer's tradeUrl. From our state machine's perspective the order
-    // is fulfilled the moment the source confirms. Buyer acceptance / Steam
-    // escrow holds are between buyer and Steam and are outside our pipeline.
-    const now = new Date();
+    // P2P delivery: Waxpeer's seller bot will eventually send the Steam trade
+    // offer to the buyer's tradeUrl, but that's an async process happening on
+    // Waxpeer's side. We park the Order in FULFILLING and the Trade in SENDING
+    // and let poll-trade-status watch /v1/check-many-steam for terminal
+    // resolution (sent / accepted / declined).
     await prisma.$transaction([
       prisma.trade.create({
         data: {
@@ -153,17 +157,19 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
           botSteamId64: 'WAXPEER_P2P',
           buyerSteamId64: order.buyerSteamId64,
           buyerTradeUrl: order.buyer.tradeUrl,
-          status: 'SENT',
+          status: 'SENDING',
           tradeOfferId: buy.sourcePaymentId ?? null,
-          sentAt: now,
         },
       }),
       prisma.order.update({
         where: { id: orderId },
-        data: { status: 'FULFILLED', fulfilledAt: now },
+        data: { status: 'FULFILLING' },
       }),
     ]);
-    log.info({ orderId, sourcePaymentId: buy.sourcePaymentId }, 'waxpeer p2p delivery dispatched, order fulfilled');
+    log.info(
+      { orderId, sourcePaymentId: buy.sourcePaymentId },
+      'waxpeer buy queued — order in FULFILLING, awaiting poll-trade-status',
+    );
     return;
   }
 

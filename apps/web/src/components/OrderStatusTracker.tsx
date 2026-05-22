@@ -15,11 +15,11 @@ const TERMINAL_STATUSES: OrderStatus[] = ['FULFILLED', 'FAILED', 'CANCELLED', 'R
 const STATUS_META: Record<OrderStatus, { label: string; tone: 'pending' | 'progress' | 'success' | 'error' }> = {
   PENDING_PAYMENT: { label: 'Awaiting payment', tone: 'pending' },
   PAID: { label: 'Payment received', tone: 'progress' },
-  FULFILLING: { label: 'Preparing your delivery', tone: 'progress' },
-  FULFILLED: { label: 'Delivered to Steam', tone: 'success' },
-  FAILED: { label: 'Failed', tone: 'error' },
+  FULFILLING: { label: 'Preparing your Steam trade offer', tone: 'progress' },
+  FULFILLED: { label: 'Steam trade offer sent', tone: 'success' },
+  FAILED: { label: 'Failed — please contact support', tone: 'error' },
   CANCELLED: { label: 'Cancelled', tone: 'error' },
-  REFUNDED: { label: 'Refunded', tone: 'error' },
+  REFUNDED: { label: 'Refunded — we couldn’t deliver this skin', tone: 'error' },
 };
 
 const SRC_TX_META: Record<SourceTransactionState, { label: string; tone: 'pending' | 'progress' | 'success' | 'error' }> = {
@@ -121,15 +121,27 @@ export const OrderStatusTracker = ({ orderId }: Props) => {
           done={order.status === 'FULFILLED'}
           active={order.status === 'FULFILLING'}
           tone={
-            order.status === 'FULFILLED' ? 'success' : order.status === 'FAILED' ? 'error' : 'pending'
+            order.status === 'FULFILLED'
+              ? 'success'
+              : order.status === 'FAILED' || order.status === 'REFUNDED'
+                ? 'error'
+                : 'pending'
           }
-          label="Steam trade offer sent"
+          label={
+            order.status === 'REFUNDED'
+              ? 'Could not deliver — refunded'
+              : order.status === 'FULFILLED'
+                ? 'Steam trade offer sent'
+                : 'Waiting for Steam trade offer'
+          }
           sub={
             order.fulfilledAt
-              ? new Date(order.fulfilledAt).toLocaleTimeString()
+              ? `Sent at ${new Date(order.fulfilledAt).toLocaleTimeString()} — accept it in your Steam client`
               : order.status === 'FULFILLING'
-                ? 'Bot is preparing the trade…'
-                : undefined
+                ? 'Usually arrives in 1–5 minutes…'
+                : order.status === 'REFUNDED'
+                  ? 'Your payment is being returned'
+                  : undefined
           }
         />
       </ol>

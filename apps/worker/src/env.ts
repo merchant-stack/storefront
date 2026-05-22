@@ -29,6 +29,7 @@ const schema = z.object({
   WAXPEER_API_KEY: optionalNonEmpty,
   DMARKET_SYNC_LIMIT: z.coerce.number().int().positive().default(60),
   DMARKET_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
+  POLL_TRADE_STATUS_INTERVAL_MS: z.coerce.number().int().positive().default(30 * 1000),
   STRIPE_SECRET_KEY: optionalNonEmpty,
   MOCK_PAYMENTS: z
     .enum(['true', 'false'])
