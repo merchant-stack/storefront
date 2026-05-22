@@ -288,19 +288,28 @@ function headerValue(
 }
 
 /**
- * Standard Webhooks secrets are prefixed (e.g. `whsec_` or `ws_`) followed by
- * a base64 representation of the raw HMAC key. Strip the prefix at the first
- * underscore, then base64-decode. Fall back to treating the raw string as the
- * key if the suffix isn't valid base64 (covers any future prefix variants).
+ * Decode a Standard-Webhooks-style signing secret like `<prefix>_<encoded-key>`.
+ *
+ * The reference spec (svix / standardwebhooks.com) defines the suffix as
+ * base64, but Whop diverges: in 2026 their dashboard issues secrets shaped
+ * `ws_<64 lowercase hex chars>` — a 32-byte HMAC key encoded as hex, not
+ * base64. Detect by character set:
+ *   - if suffix has even length and every char is in `[0-9a-fA-F]`, treat as hex
+ *   - otherwise treat as base64
+ *   - if both decodings fail (zero length), use the raw secret as utf-8 bytes
+ *     so the verifier degrades gracefully against any future format change
+ *
+ * This is the verifier's single-point-of-truth for secret encoding — keep all
+ * format-sniffing here so HMAC computation stays a clean one-liner.
  */
 function decodeSecret(secret: string): Buffer {
   const idx = secret.indexOf('_');
   const suffix = idx === -1 ? secret : secret.slice(idx + 1);
-  // Be permissive about the encoding — Whop's exact prefix shape has shifted
-  // historically (`whsec_` vs `ws_…`), so try base64 first and fall back to
-  // utf8 if the decoded bytes seem corrupted (zero length).
-  const decoded = Buffer.from(suffix, 'base64');
-  if (decoded.length > 0) return decoded;
+  if (suffix.length > 0 && suffix.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(suffix)) {
+    return Buffer.from(suffix, 'hex');
+  }
+  const b64 = Buffer.from(suffix, 'base64');
+  if (b64.length > 0) return b64;
   return Buffer.from(secret, 'utf8');
 }
 

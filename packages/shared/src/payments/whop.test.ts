@@ -4,8 +4,9 @@ import { createWhopProvider } from './whop.js';
 
 const CFG = {
   apiKey: 'apik_test',
-  // ws_ prefix + raw 32-byte base64 secret.
-  webhookSecret: 'ws_' + Buffer.from('secret-bytes-for-test-1234567890').toString('base64'),
+  // ws_ prefix + 32 random bytes encoded as 64 lowercase hex chars — this is
+  // the actual Whop secret shape observed in prod 2026-05-23.
+  webhookSecret: 'ws_' + Buffer.from('secret-bytes-for-test-1234567890').toString('hex'),
   companyId: 'biz_test',
   productId: 'prod_test',
 };
@@ -13,8 +14,13 @@ const CFG = {
 function sign(secret: string, id: string, ts: string, body: string): string {
   const idx = secret.indexOf('_');
   const suffix = idx === -1 ? secret : secret.slice(idx + 1);
-  const decoded = Buffer.from(suffix, 'base64');
-  const key = decoded.length > 0 ? decoded : Buffer.from(secret, 'utf8');
+  let key: Buffer;
+  if (suffix.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(suffix)) {
+    key = Buffer.from(suffix, 'hex');
+  } else {
+    const b64 = Buffer.from(suffix, 'base64');
+    key = b64.length > 0 ? b64 : Buffer.from(secret, 'utf8');
+  }
   const sig = createHmac('sha256', key).update(`${id}.${ts}.${body}`).digest('base64');
   return `v1,${sig}`;
 }
