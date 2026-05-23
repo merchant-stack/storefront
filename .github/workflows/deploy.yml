@@ -9,6 +9,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/worker/**'
+      - 'apps/web/**'
       - 'packages/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
