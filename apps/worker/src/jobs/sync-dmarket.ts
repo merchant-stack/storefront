@@ -44,6 +44,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   );
 
   const allOffers: WaxpeerOffer[] = [];
+  let bandFailures = 0;
   for (const band of PRICE_BANDS) {
     try {
       const offers = await waxpeer.searchItems({
@@ -55,6 +56,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
       log.info({ band: band.label, count: offers.length }, 'band fetched');
       allOffers.push(...offers);
     } catch (err) {
+      bandFailures += 1;
       log.error({ band: band.label, err }, 'band fetch failed');
     }
   }
@@ -71,16 +73,24 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
     await upsertOffer(offer, gameId, markupBps);
   }
 
+  // Safety: if every band failed (and so we have no fresh data at all), do NOT
+  // retire the previous snapshot. Otherwise a single Waxpeer outage / IP-block
+  // / revoked key wipes the storefront in a single tick — exactly what bit us
+  // on 2026-05-23 when our IP fell off Waxpeer's trusted list. Stale listings
+  // are a worse buyer experience than fresh data, but they beat an empty grid.
+  const allBandsFailed = bandFailures === PRICE_BANDS.length;
   const fetchedIds = usable.map((o) => o.itemId);
-  const retired = await prisma.sourceItem.updateMany({
-    where: {
-      provider: 'WAXPEER',
-      gameId,
-      available: true,
-      sourceOfferId: { notIn: fetchedIds },
-    },
-    data: { available: false },
-  });
+  const retired = allBandsFailed
+    ? { count: 0 }
+    : await prisma.sourceItem.updateMany({
+        where: {
+          provider: 'WAXPEER',
+          gameId,
+          available: true,
+          sourceOfferId: { notIn: fetchedIds },
+        },
+        data: { available: false },
+      });
 
   // Also retire all legacy DMarket items so they don't show in the storefront.
   const retiredLegacy = await prisma.sourceItem.updateMany({
@@ -95,6 +105,8 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
       usable: usable.length,
       retired: retired.count,
       retiredLegacy: retiredLegacy.count,
+      bandFailures,
+      retireSkipped: allBandsFailed,
       durationMs: Date.now() - startedAt.getTime(),
     },
     'sync complete',
