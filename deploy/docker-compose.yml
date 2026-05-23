@@ -26,6 +26,33 @@ services:
     networks:
       - rustskinpay
 
+  # Self-hosted Redis on the same VPS — replaces Upstash after the free-tier
+  # quota blew up mid-flight. appendonly + bound mem keeps the queue safe
+  # across reboots; ~10MB is plenty for our queue sizes (a few hundred
+  # in-flight job records, a handful of locks/nonces).
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --maxmemory
+      - '128mb'
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    expose:
+      - '6379'
+    networks:
+      - rustskinpay
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
   web:
     image: ghcr.io/merchant-stack/storefront-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -47,6 +74,8 @@ services:
       - ./api.env
     expose:
       - '4000'
+    depends_on:
+      - redis
     networks:
       - rustskinpay
     healthcheck:
@@ -61,6 +90,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./worker.env
+    depends_on:
+      - redis
     networks:
       - rustskinpay
     healthcheck:
@@ -76,3 +107,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  redis_data:

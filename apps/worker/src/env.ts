@@ -32,7 +32,10 @@ const schema = z.object({
   // 4-minute staleness guard (MAX_LISTING_AGE_SECONDS) has ~2x buffer before
   // it fires. Was 5min — buyers were hitting "listing_stale" on slow clicks.
   DMARKET_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(2 * 60 * 1000),
-  POLL_TRADE_STATUS_INTERVAL_MS: z.coerce.number().int().positive().default(30 * 1000),
+  // 90s tick — fast enough to react to Steam-trade outcomes within ~p95 of a
+  // human's accept window, but 3× less BullMQ chatter than the old 30s tick
+  // (which burned through Upstash's 500k/month free quota in ~2 days, 2026-05-23).
+  POLL_TRADE_STATUS_INTERVAL_MS: z.coerce.number().int().positive().default(90 * 1000),
   STRIPE_SECRET_KEY: optionalNonEmpty,
   // Whop — worker only needs these for issuing refunds. createSession is
   // api-side. Keep parity with apps/api/src/env.ts so a leaked-half deploy

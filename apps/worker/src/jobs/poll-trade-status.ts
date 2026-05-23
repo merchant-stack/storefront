@@ -47,6 +47,18 @@ export async function pollTradeStatus(_job: Job): Promise<void> {
   const youngestPollable = new Date(now.getTime() - MIN_TRADE_AGE_MS);
   const oldestPollable = new Date(now.getTime() - TIMEOUT_AGE_MS);
 
+  // Fast skip when nothing is in flight — most ticks fall into this branch
+  // because trades typically resolve within minutes. Avoids the two findMany
+  // queries below when there's nothing to do.
+  const pendingCount = await prisma.trade.count({
+    where: {
+      botSteamId64: 'WAXPEER_P2P',
+      status: { in: ['SENDING', 'SENT'] },
+      errorCode: null,
+    },
+  });
+  if (pendingCount === 0) return;
+
   // 1. Fan out: pick up trades inside the active polling window.
   const candidates = (await prisma.trade.findMany({
     where: {
