@@ -101,6 +101,7 @@ enum SourceProvider {
   LIS_SKINS
   WAXPEER
   RUSTTM
+  OWN_INVENTORY
 }
 
 /// Items we offer for sale on the storefront, sourced from external marketplaces.

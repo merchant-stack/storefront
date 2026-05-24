@@ -12,6 +12,7 @@
     "./dmarket": "./src/dmarket.ts",
     "./waxpeer": "./src/waxpeer.ts",
     "./rusttm": "./src/rusttm.ts",
+    "./market-prices": "./src/market-prices.ts",
     "./payments": "./src/payments/index.ts"
   },
   "scripts": {

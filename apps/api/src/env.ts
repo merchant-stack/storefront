@@ -66,7 +66,12 @@ const schema = z.object({
   DMARKET_PUBLIC_KEY: optionalNonEmpty,
   DMARKET_SECRET_KEY: optionalNonEmpty,
   DMARKET_BASE_URL: z.string().url().default('https://api.dmarket.com'),
-  DMARKET_DEFAULT_MARKUP_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
+  // Default markup applied on top of the max public-marketplace floor price
+  // for the OWN_INVENTORY sync. 1000 bps = +10%. Pre-2026-05-24 (the
+  // marketplace-source era) this defaulted to 1500 (+15%). Override per-env
+  // via DMARKET_DEFAULT_MARKUP_BPS. (Name is legacy from the DMarket era —
+  // not worth a rename until the field name in the schema follows.)
+  DMARKET_DEFAULT_MARKUP_BPS: z.coerce.number().int().min(0).max(10000).default(1000),
   // Soft cap on what we'll actually fulfil. Items priced above this are still
   // shown on the storefront but can't be purchased yet — we display a
   // "restocking" message. Raise (in cents) as bot balance + ops confidence grows.

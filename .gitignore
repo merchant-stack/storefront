@@ -41,7 +41,12 @@ desktop.ini
 
 # Steam bot session data — contains live session tokens
 apps/worker/.steam-session/
-apps/worker/steamguard-*.maFile
+
+# Steam Mobile Authenticator files (.maFile) — contain shared_secret +
+# identity_secret. Catastrophic to leak: enable full Steam account takeover.
+# Catch them anywhere in the repo, not just under apps/worker/.
+*.maFile
+**/*.maFile
 
 # Coverage
 coverage/

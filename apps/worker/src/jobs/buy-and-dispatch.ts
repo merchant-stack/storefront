@@ -68,7 +68,49 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
     });
   }
 
-  // 2. Buy on source — route to the provider that listed the item.
+  // 2a. OWN_INVENTORY fast path: item is already in our Steam bot inventory,
+  //     there's nothing to buy. Mark SourceTransaction SUCCESS immediately,
+  //     create a Trade row pointing at our bot, enqueue dispatch-trade.
+  //     The existing dispatch-trade job already knows how to send Steam trade
+  //     offers from the bot's inventory.
+  if (tx.provider === 'OWN_INVENTORY') {
+    await prisma.sourceTransaction.update({
+      where: { id: tx.id },
+      data: { state: 'SUCCESS', succeededAt: new Date() },
+    });
+    const trade = await prisma.trade.create({
+      data: {
+        orderId,
+        botSteamId64: 'OWN_BOT',
+        buyerSteamId64: order.buyerSteamId64,
+        buyerTradeUrl: order.buyer.tradeUrl,
+        status: 'QUEUED',
+      },
+    });
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'FULFILLING' },
+    });
+    await tradeDispatchQueue.add(
+      'dispatch',
+      { tradeId: trade.id },
+      {
+        jobId: `trade_${trade.id}`,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: { age: 60 * 60 * 24, count: 1000 },
+        removeOnFail: { age: 60 * 60 * 24 * 7 },
+      },
+    );
+    log.info({ orderId, tradeId: trade.id }, 'own-inventory buy resolved instantly; trade dispatch queued');
+    return;
+  }
+
+  // 2b. Marketplace path: buy on source — route to the provider that listed
+  //     the item. Used by RUSTTM / WAXPEER / DMARKET when (and only when)
+  //     they have catalog rows; today they shouldn't (sync retires them on
+  //     every tick under OWN_INVENTORY mode) but kept wired so we can swap
+  //     back if needed.
   log.info({ orderId, provider: tx.provider, sourceOfferId: tx.sourceOfferId }, 'buying on source');
   const expectedPriceMinor = tx.amountSpentMinor ?? 0;
 

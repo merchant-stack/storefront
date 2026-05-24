@@ -116,17 +116,29 @@ export const dispatchTrade = async (job: Job<TradeDispatchJob>): Promise<void> =
     return;
   }
 
-  await prisma.trade.update({
-    where: { id: tradeId },
-    data: {
-      status: 'SENT',
-      tradeOfferId: sendResult.offerId,
-      sentAt: new Date(),
-    },
-  });
+  // Transition Trade=SENT and Order=FULFILLED atomically. The OWN_INVENTORY
+  // model treats "bot sent the offer" as fulfilment for our purposes — the
+  // buyer is responsible for accepting on Steam side. If they decline,
+  // future work will catch that via Steam-side offer-status polling and
+  // issue a refund; for MVP we trust the send.
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.trade.update({
+      where: { id: tradeId },
+      data: {
+        status: 'SENT',
+        tradeOfferId: sendResult.offerId,
+        sentAt: now,
+      },
+    }),
+    prisma.order.updateMany({
+      where: { id: trade.orderId, status: { in: ['PAID', 'FULFILLING'] } },
+      data: { status: 'FULFILLED', fulfilledAt: now },
+    }),
+  ]);
 
   log.info(
-    { tradeId, offerId: sendResult.offerId, status: sendResult.status },
-    'trade offer sent',
+    { tradeId, orderId: trade.orderId, offerId: sendResult.offerId, status: sendResult.status },
+    'trade offer sent; order fulfilled',
   );
 };
