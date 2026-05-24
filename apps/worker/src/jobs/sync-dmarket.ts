@@ -145,7 +145,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
         markupBps,
         currency: 'USD',
         available: true,
-        rawPayload: item as object,
+        rawPayload: JSON.parse(JSON.stringify(item)) as object,
         lastSyncedAt: new Date(),
       },
       update: {
@@ -157,7 +157,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
         salePriceMinor,
         markupBps,
         available: true,
-        rawPayload: item as object,
+        rawPayload: JSON.parse(JSON.stringify(item)) as object,
         lastSyncedAt: new Date(),
       },
     });
