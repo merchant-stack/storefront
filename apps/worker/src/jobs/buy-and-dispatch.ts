@@ -1,26 +1,29 @@
 // Buy on source + dispatch to buyer.
 //
-// Two delivery models depending on provider:
-//   - WAXPEER: P2P. We pass the buyer's trade URL to buy-one-p2p; Waxpeer's
-//     seller bot sends the Steam trade offer directly to the buyer. The
-//     buy-one-p2p response only acknowledges that Waxpeer queued the P2P
-//     request — actual seller-bot dispatch + buyer-side delivery are async
-//     and can fail silently. So on success we transition the Order to
-//     FULFILLING and the Trade to SENDING, then let the poll-trade-status
-//     worker watch /v1/check-many-steam and promote to FULFILLED only when
-//     Waxpeer confirms the trade was actually sent.
+// Three delivery models depending on provider:
+//   - RUSTTM: P2P. We pass the buyer's trade URL (parsed for partner+token)
+//     plus our SourceTransaction.id as custom_id to /buy-for. rust.tm's
+//     seller bot dispatches the Steam trade offer directly to the buyer.
+//     The buy-for response acknowledges the buy, but actual delivery is
+//     async and tracked by poll-trade-status via get-list-buy-info-by-custom-id
+//     (keyed by the custom_id we passed in == our SourceTransaction.id).
+//   - WAXPEER (dormant fallback): same P2P model as rust.tm but via Waxpeer's
+//     /buy-one-p2p endpoint. Their wallet-sampling guard against false-negative
+//     buy responses is preserved for if we ever route back to them.
 //   - DMARKET (legacy / unused): item is delivered to OUR bot inventory.
 //     We then create a Trade row and enqueue dispatch-trade so our bot
-//     re-sends the item to the buyer.
+//     re-sends the item to the buyer. Requires us to actually operate a
+//     Steam bot — we don't, so this path is dead until/unless we set one up.
 //
 // Idempotent: if the SourceTransaction is already SUCCESS we skip the buy.
-// On any buy failure we issue a Stripe refund + transition Order to REFUNDED.
+// On any buy failure we issue a refund + transition Order to REFUNDED.
 
 import type { Job } from 'bullmq';
 import pino from 'pino';
 import { prisma } from '@rustskinpay/db';
 import { dmarket } from '../dmarket-client.js';
 import { waxpeer } from '../waxpeer-client.js';
+import { rusttm } from '../rusttm-client.js';
 import { tradeDispatchQueue } from '../queue.js';
 import { refundOrder } from '../refund.js';
 
@@ -76,15 +79,19 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
   // that case the wallet drops by ~item price — we use that as the source of
   // truth instead of trusting the response. Without this guard we
   // double-lose: pay Waxpeer, refund the buyer.
+  // (No equivalent guard for rust.tm yet — re-add if we see false negatives
+  // in practice; the docs suggest their buy response is authoritative.)
   const balanceBefore =
     tx.provider === 'WAXPEER' && !waxpeer.isMock()
       ? await waxpeer.getBalance().catch(() => null)
       : null;
 
   const buy =
-    tx.provider === 'WAXPEER'
-      ? await waxpeer.buyOffer(tx.sourceOfferId, expectedPriceMinor, order.buyer.tradeUrl)
-      : await dmarket.buyOffer(tx.sourceOfferId, expectedPriceMinor);
+    tx.provider === 'RUSTTM'
+      ? await rusttm.buyOffer(tx.sourceOfferId, expectedPriceMinor, order.buyer.tradeUrl, tx.id)
+      : tx.provider === 'WAXPEER'
+        ? await waxpeer.buyOffer(tx.sourceOfferId, expectedPriceMinor, order.buyer.tradeUrl)
+        : await dmarket.buyOffer(tx.sourceOfferId, expectedPriceMinor);
 
   if (!buy.success) {
     // Waxpeer false-negative check: wait a bit for the wallet to settle, then
@@ -143,6 +150,37 @@ export async function buyAndDispatch(job: Job<BuyAndDispatchJob>): Promise<void>
       rawResponse: buy.raw as object,
     },
   });
+
+  if (tx.provider === 'RUSTTM') {
+    // P2P delivery via rust.tm. Their seller bot sends the Steam trade offer
+    // directly to the buyer's tradeUrl. We park the Order in FULFILLING and
+    // the Trade in SENDING and let poll-trade-status watch
+    // /get-list-buy-info-by-custom-id for terminal resolution. We use
+    // tx.id (which we already passed as custom_id) as the polling key,
+    // stored in Trade.tradeOfferId. NOT buy.sourcePaymentId — that's rust.tm's
+    // internal item id, useful for debugging but not the polling key.
+    await prisma.$transaction([
+      prisma.trade.create({
+        data: {
+          orderId,
+          botSteamId64: 'RUSTTM_P2P',
+          buyerSteamId64: order.buyerSteamId64,
+          buyerTradeUrl: order.buyer.tradeUrl,
+          status: 'SENDING',
+          tradeOfferId: tx.id,
+        },
+      }),
+      prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'FULFILLING' },
+      }),
+    ]);
+    log.info(
+      { orderId, sourcePaymentId: buy.sourcePaymentId, customId: tx.id },
+      'rust.tm buy queued — order in FULFILLING, awaiting poll-trade-status',
+    );
+    return;
+  }
 
   if (tx.provider === 'WAXPEER') {
     // P2P delivery: Waxpeer's seller bot will eventually send the Steam trade

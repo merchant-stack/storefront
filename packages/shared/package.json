@@ -11,6 +11,7 @@
     "./ids": "./src/ids.ts",
     "./dmarket": "./src/dmarket.ts",
     "./waxpeer": "./src/waxpeer.ts",
+    "./rusttm": "./src/rusttm.ts",
     "./payments": "./src/payments/index.ts"
   },
   "scripts": {

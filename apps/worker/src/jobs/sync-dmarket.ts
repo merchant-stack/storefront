@@ -1,6 +1,9 @@
-// Periodic catalog sync. Currently sources from Waxpeer (cheaper inventory,
-// items from ~$0.88 vs DMarket's $11 floor). Original DMarket integration is
-// kept around in shared/ for potential reactivation as a secondary source.
+// Periodic catalog sync. Currently sources from rust.tm — moved here from
+// Waxpeer on 2026-05-24 after four Waxpeer keys died in 36h. rust.tm is the
+// TM-family Rust marketplace (sister of market.csgo.com), same P2P
+// architecture, deeper catalog, no key-rotation drama. Waxpeer + DMarket
+// clients are kept wired in the repo as dormant fallbacks; switching back is
+// a code change here only (provider tag + import).
 //
 // Items previously seen but absent from this batch are marked available=false
 // so the storefront stops showing them.
@@ -9,8 +12,8 @@ import type { Job } from 'bullmq';
 import pino from 'pino';
 import { prisma } from '@rustskinpay/db';
 import { applyMarkup } from '@rustskinpay/shared/dmarket';
-import type { WaxpeerOffer } from '@rustskinpay/shared/waxpeer';
-import { waxpeer } from '../waxpeer-client.js';
+import type { RustTmOffer } from '@rustskinpay/shared/rusttm';
+import { rusttm } from '../rusttm-client.js';
 import { env } from '../env.js';
 
 const log = pino({ name: 'sync-source' });
@@ -20,7 +23,8 @@ export interface SyncDMarketJob {
   limit?: number;
 }
 
-// Price bands in USD cents. Waxpeer's `min_price`/`max_price` are in cents.
+// Price bands in USD cents. rust.tm's `minPriceMinor`/`maxPriceMinor` are in
+// cents (we convert to milles at the boundary inside the rust.tm client).
 const PRICE_BANDS: Array<{ min: number; max?: number; limit: number; label: string }> = [
   { min: 1, max: 200, limit: 100, label: '$0.01–$2' },
   { min: 200, max: 1000, limit: 80, label: '$2–$10' },
@@ -39,15 +43,15 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   const startedAt = new Date();
 
   log.info(
-    { gameId, mock: waxpeer.isMock(), bands: PRICE_BANDS.length, source: 'WAXPEER' },
+    { gameId, mock: rusttm.isMock(), bands: PRICE_BANDS.length, source: 'RUSTTM' },
     'sync starting',
   );
 
-  const allOffers: WaxpeerOffer[] = [];
+  const allOffers: RustTmOffer[] = [];
   let bandFailures = 0;
   for (const band of PRICE_BANDS) {
     try {
-      const offers = await waxpeer.searchItems({
+      const offers = await rusttm.searchItems({
         gameId,
         limit: band.limit,
         minPriceMinor: band.min,
@@ -61,6 +65,8 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
     }
   }
 
+  // rust.tm's itemId == market_hash_name (the dump is unique by name). Dedup
+  // across bands by hash_name in case price-range boundaries overlap.
   const seen = new Set<string>();
   const usable = allOffers.filter((o) => {
     if (!o.itemId || o.priceMinor <= 0) return false;
@@ -74,17 +80,16 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   }
 
   // Safety: if every band failed (and so we have no fresh data at all), do NOT
-  // retire the previous snapshot. Otherwise a single Waxpeer outage / IP-block
-  // / revoked key wipes the storefront in a single tick — exactly what bit us
-  // on 2026-05-23 when our IP fell off Waxpeer's trusted list. Stale listings
-  // are a worse buyer experience than fresh data, but they beat an empty grid.
+  // retire the previous snapshot. Otherwise a single rust.tm outage / revoked
+  // key wipes the storefront in a single tick — same trap that bit us with
+  // Waxpeer on 2026-05-23. Stale listings beat an empty grid.
   const allBandsFailed = bandFailures === PRICE_BANDS.length;
   const fetchedIds = usable.map((o) => o.itemId);
   const retired = allBandsFailed
     ? { count: 0 }
     : await prisma.sourceItem.updateMany({
         where: {
-          provider: 'WAXPEER',
+          provider: 'RUSTTM',
           gameId,
           available: true,
           sourceOfferId: { notIn: fetchedIds },
@@ -92,8 +97,14 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
         data: { available: false },
       });
 
-  // Also retire all legacy DMarket items so they don't show in the storefront.
-  const retiredLegacy = await prisma.sourceItem.updateMany({
+  // Also retire all legacy WAXPEER and DMARKET items so they don't show in the
+  // storefront. The previous-provider rows are stale from the moment we cut
+  // over; leaving them visible would let buyers click items we can't fulfil.
+  const retiredLegacyWax = await prisma.sourceItem.updateMany({
+    where: { provider: 'WAXPEER', available: true },
+    data: { available: false },
+  });
+  const retiredLegacyDm = await prisma.sourceItem.updateMany({
     where: { provider: 'DMARKET', available: true },
     data: { available: false },
   });
@@ -104,7 +115,8 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
       fetched: allOffers.length,
       usable: usable.length,
       retired: retired.count,
-      retiredLegacy: retiredLegacy.count,
+      retiredLegacyWaxpeer: retiredLegacyWax.count,
+      retiredLegacyDmarket: retiredLegacyDm.count,
       bandFailures,
       retireSkipped: allBandsFailed,
       durationMs: Date.now() - startedAt.getTime(),
@@ -116,7 +128,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
 }
 
 async function upsertOffer(
-  offer: WaxpeerOffer,
+  offer: RustTmOffer,
   gameId: string,
   markupBps: number,
 ): Promise<void> {
@@ -124,10 +136,10 @@ async function upsertOffer(
   const title = offer.marketHashName;
   await prisma.sourceItem.upsert({
     where: {
-      provider_sourceOfferId: { provider: 'WAXPEER', sourceOfferId: offer.itemId },
+      provider_sourceOfferId: { provider: 'RUSTTM', sourceOfferId: offer.itemId },
     },
     create: {
-      provider: 'WAXPEER',
+      provider: 'RUSTTM',
       sourceOfferId: offer.itemId,
       gameId,
       marketHashName: offer.marketHashName,

@@ -27,6 +27,7 @@ const schema = z.object({
   DMARKET_BASE_URL: z.string().url().default('https://api.dmarket.com'),
   DMARKET_DEFAULT_MARKUP_BPS: z.coerce.number().int().min(0).max(10000).default(1500),
   WAXPEER_API_KEY: optionalNonEmpty,
+  RUSTTM_API_KEY: optionalNonEmpty,
   DMARKET_SYNC_LIMIT: z.coerce.number().int().positive().default(60),
   // 2-minute sync interval keeps the catalog tight enough that the api's
   // 4-minute staleness guard (MAX_LISTING_AGE_SECONDS) has ~2x buffer before

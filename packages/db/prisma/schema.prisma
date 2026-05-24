@@ -100,6 +100,7 @@ enum SourceProvider {
   SKINPORT
   LIS_SKINS
   WAXPEER
+  RUSTTM
 }
 
 /// Items we offer for sale on the storefront, sourced from external marketplaces.
