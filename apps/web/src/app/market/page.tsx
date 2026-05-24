@@ -15,6 +15,11 @@ export default async function MarketPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
+  // No purchasableOnly here: the /market page is the FULL browsable catalog.
+  // It should include items above our fulfilment ceiling (rendered with a
+  // "Restocking" badge) AND SHOWCASE placeholders (rendered with a
+  // "Coming soon" badge). Filtering purchasable-only is reserved for landing
+  // surfaces / related-items strips where every card must be buy-clickable.
   const [{ items }, facets] = await Promise.all([
     getItems({
       q: params.q,
@@ -22,7 +27,6 @@ export default async function MarketPage({
       type: params.type,
       rarity: params.rarity,
       limit: 60,
-      purchasableOnly: true,
     }),
     getFacets(),
   ]);
