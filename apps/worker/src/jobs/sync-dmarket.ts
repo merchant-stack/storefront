@@ -122,8 +122,12 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
       continue;
     }
     const salePriceMinor = applyMarkup(sourcePriceMinor, markupBps);
+    // Use steamcommunity-a.akamaihd.net — it's on the web's CSP + Next.js
+    // remotePatterns allowlist (apps/web/next.config.mjs). The newer
+    // community.akamai.steamstatic.com CDN works too but isn't whitelisted,
+    // so the browser blocks those img loads.
     const iconUrl = item.icon_url
-      ? `https://community.akamai.steamstatic.com/economy/image/${item.icon_url}`
+      ? `https://steamcommunity-a.akamaihd.net/economy/image/${item.icon_url}`
       : null;
 
     await prisma.sourceItem.upsert({
