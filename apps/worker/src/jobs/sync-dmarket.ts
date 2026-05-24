@@ -214,6 +214,20 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
     data: { available: false },
   });
 
+  // 6. Refresh the SHOWCASE catalog — placeholder "coming soon" items that
+  //    make the storefront feel fuller than our 14-item bot inventory.
+  //    Capped at SHOWCASE_MAX_RATIO_PCT of the real-inventory count so the
+  //    catalog stays mostly real (max 50% by default). Showcase items are
+  //    purely visual; the api rejects checkout for SHOWCASE provider and the
+  //    web shows a "coming soon" badge instead of a Buy CTA.
+  const showcaseResult = await refreshShowcaseCatalog({
+    gameId,
+    realCount: upserted,
+    realHashNames: new Set(usableInventoryHashNames(inventory)),
+    priceIndex,
+    markupBps,
+  });
+
   log.info(
     {
       gameId,
@@ -222,10 +236,163 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
       skippedNoPrice,
       retired: retired.count,
       retiredLegacy: retiredLegacy.count,
+      showcaseUpserted: showcaseResult.upserted,
+      showcaseRetired: showcaseResult.retired,
       durationMs: Date.now() - startedAt.getTime(),
     },
     'sync complete',
   );
 
   return { fetched: inventory.length, upserted, retired: retired.count };
+}
+
+function usableInventoryHashNames(items: BotInventoryItem[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const i of items) {
+    if (!i.market_hash_name || seen.has(i.market_hash_name)) continue;
+    seen.add(i.market_hash_name);
+    out.push(i.market_hash_name);
+  }
+  return out;
+}
+
+interface RefreshShowcaseInput {
+  gameId: string;
+  realCount: number;
+  realHashNames: Set<string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  priceIndex: any;
+  markupBps: number;
+}
+
+/**
+ * Upsert SHOWCASE rows so the visible catalog feels fuller. Idempotent across
+ * sync ticks: items keep stable ids (sourceOfferId = market_hash_name) so a
+ * bookmarked /market/<id> URL doesn't 404 between syncs. Any showcase row
+ * whose hash is no longer in our current pick set OR now exists in our real
+ * inventory is retired (set available=false).
+ */
+async function refreshShowcaseCatalog(input: RefreshShowcaseInput): Promise<{
+  upserted: number;
+  retired: number;
+}> {
+  const maxRatio = env.SHOWCASE_MAX_RATIO_PCT;
+  if (maxRatio <= 0 || input.realCount === 0) {
+    // Disabled or no real items to anchor against → retire any leftover
+    // showcase rows so the storefront isn't 100% placeholder.
+    const retired = await prisma.sourceItem.updateMany({
+      where: { provider: 'SHOWCASE', available: true },
+      data: { available: false },
+    });
+    return { upserted: 0, retired: retired.count };
+  }
+
+  // showcase_count + real_count == total. showcase_count <= ratio% of total.
+  // Solving: showcase_count = floor(real_count * ratio / (100 - ratio)).
+  const targetCount = Math.floor((input.realCount * maxRatio) / (100 - maxRatio));
+  if (targetCount === 0) {
+    const retired = await prisma.sourceItem.updateMany({
+      where: { provider: 'SHOWCASE', available: true },
+      data: { available: false },
+    });
+    return { upserted: 0, retired: retired.count };
+  }
+
+  // Pull a price-diversified slate: a couple from each band so the catalog
+  // doesn't fill with 30 graffiti at $0.03. Bands in cents.
+  const PRICE_BANDS = [
+    { min: 50, max: 200 }, // $0.50 – $2
+    { min: 200, max: 1000 }, // $2 – $10
+    { min: 1000, max: 5000 }, // $10 – $50
+    { min: 5000, max: 20000 }, // $50 – $200
+    { min: 20000, max: 100000 }, // $200 – $1000
+  ];
+  const perBand = Math.max(1, Math.ceil(targetCount / PRICE_BANDS.length));
+
+  const allEntries: Array<{ marketHashName: string; priceMinor: number }> = (
+    input.priceIndex as { entries: () => Array<{ marketHashName: string; priceMinor: number }> }
+  ).entries();
+
+  const picked: Array<{ marketHashName: string; priceMinor: number }> = [];
+  for (const band of PRICE_BANDS) {
+    const candidates = allEntries.filter(
+      (e) =>
+        e.priceMinor >= band.min &&
+        e.priceMinor <= band.max &&
+        !input.realHashNames.has(e.marketHashName),
+    );
+    // Shuffle (Fisher-Yates) then take `perBand` — gives variety across syncs
+    // without re-randomising everything every tick (good enough for UX).
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = candidates[i]!;
+      candidates[i] = candidates[j]!;
+      candidates[j] = tmp;
+    }
+    picked.push(...candidates.slice(0, perBand));
+    if (picked.length >= targetCount) break;
+  }
+  const finalPicks = picked.slice(0, targetCount);
+  const pickedHashes = new Set(finalPicks.map((p) => p.marketHashName));
+
+  let upserted = 0;
+  for (const pick of finalPicks) {
+    const salePriceMinor = applyMarkup(pick.priceMinor, input.markupBps);
+    await prisma.sourceItem.upsert({
+      where: {
+        provider_sourceOfferId: {
+          provider: 'SHOWCASE',
+          sourceOfferId: pick.marketHashName,
+        },
+      },
+      create: {
+        provider: 'SHOWCASE',
+        sourceOfferId: pick.marketHashName,
+        gameId: input.gameId,
+        marketHashName: pick.marketHashName,
+        displayName: pick.marketHashName,
+        // Showcase items have no real Steam asset to pull an icon from. The
+        // ItemCard component already renders a "no image" placeholder for
+        // null iconUrl, so the visual is consistent. Future enhancement:
+        // resolve icons via Steam Community Market lookups.
+        iconUrl: null,
+        iconBackgroundColor: null,
+        type: null,
+        rarity: null,
+        sourcePriceMinor: pick.priceMinor,
+        salePriceMinor,
+        markupBps: input.markupBps,
+        currency: 'USD',
+        available: true,
+        rawPayload: { showcase: true, source: 'rust.tm' },
+        lastSyncedAt: new Date(),
+      },
+      update: {
+        sourcePriceMinor: pick.priceMinor,
+        salePriceMinor,
+        markupBps: input.markupBps,
+        available: true,
+        lastSyncedAt: new Date(),
+      },
+    });
+    upserted += 1;
+  }
+
+  // Retire showcase rows that didn't make this tick's cut OR have since
+  // appeared in real inventory (we don't want to double-up a placeholder
+  // for an item we now actually stock).
+  const retired = await prisma.sourceItem.updateMany({
+    where: {
+      provider: 'SHOWCASE',
+      available: true,
+      OR: [
+        { sourceOfferId: { notIn: Array.from(pickedHashes) } },
+        { sourceOfferId: { in: Array.from(input.realHashNames) } },
+      ],
+    },
+    data: { available: false },
+  });
+
+  return { upserted, retired: retired.count };
 }

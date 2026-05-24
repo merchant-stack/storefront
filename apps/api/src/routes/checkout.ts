@@ -78,6 +78,13 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
     const created = await prisma.$transaction(async (tx) => {
       const item = await tx.sourceItem.findUnique({ where: { id: sourceItemId } });
       if (!item || !item.available) return { error: 'item_unavailable' as const };
+      // SHOWCASE items are placeholders we display to make the catalog feel
+      // fuller — they're not in our bot inventory and can't be delivered.
+      // The web hides the Buy CTA for these, but a tampered client could
+      // still POST the id here, so guard server-side.
+      if (item.provider === 'SHOWCASE') {
+        return { error: 'item_coming_soon' as const };
+      }
       // Soft cap: refuse anything above the configured ceiling. UI shows a
       // "restocking" message; this is the server-side guard against a tampered
       // client.

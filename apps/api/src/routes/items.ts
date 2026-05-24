@@ -40,6 +40,12 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
         ...(effectiveMax !== undefined ? { lte: effectiveMax } : {}),
       };
     }
+    // purchasableOnly callers (landing "Latest drops", related-items strip)
+    // are showing surfaces where every card MUST be buyable; SHOWCASE rows
+    // are placeholders and would render a "Coming soon" badge — wrong fit.
+    if (q.purchasableOnly) {
+      where.provider = { not: 'SHOWCASE' };
+    }
     if (q.q) where.displayName = { contains: q.q, mode: 'insensitive' };
     if (q.type) where.type = { equals: q.type, mode: 'insensitive' };
     if (q.rarity) where.rarity = { equals: q.rarity, mode: 'insensitive' };
@@ -71,15 +77,19 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
         salePriceMinor: true,
         currency: true,
         lastSyncedAt: true,
+        // Read provider locally to compute `status`; we DO NOT expose it on
+        // the response (per the source-marketplace scrub on 2026-05-20).
+        provider: true,
       },
     });
 
     const hasMore = rows.length > q.limit;
     const sliced = hasMore ? rows.slice(0, q.limit) : rows;
-    const items = sliced.map((it) => ({
-      ...it,
-      purchasable: it.salePriceMinor <= env.MAX_BUY_PRICE_MINOR,
-    }));
+    const items = sliced.map((it) => {
+      const { provider, ...rest } = it;
+      const status = computeStatus(provider, it.salePriceMinor);
+      return { ...rest, status, purchasable: status === 'in_stock' };
+    });
     const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null;
 
     return { items, nextCursor };
@@ -126,11 +136,30 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
         currency: true,
         available: true,
         lastSyncedAt: true,
+        provider: true,
       },
     });
     if (!item) return reply.code(404).send({ error: 'not_found' });
+    const { provider, ...rest } = item;
+    const status = computeStatus(provider, item.salePriceMinor);
     return {
-      item: { ...item, purchasable: item.salePriceMinor <= env.MAX_BUY_PRICE_MINOR },
+      item: { ...rest, status, purchasable: status === 'in_stock' },
     };
   });
 };
+
+/**
+ * Storefront card status the web uses to pick the right badge / CTA. Hides
+ * the underlying provider from the wire.
+ *   - in_stock: real bot inventory, within the buy-price cap → "Buy" CTA
+ *   - restocking: real bot inventory but above MAX_BUY_PRICE_MINOR → "Restocking"
+ *   - coming_soon: SHOWCASE placeholder, never buyable → "Coming soon" badge
+ */
+function computeStatus(
+  provider: string,
+  salePriceMinor: number,
+): 'in_stock' | 'restocking' | 'coming_soon' {
+  if (provider === 'SHOWCASE') return 'coming_soon';
+  if (salePriceMinor > env.MAX_BUY_PRICE_MINOR) return 'restocking';
+  return 'in_stock';
+}

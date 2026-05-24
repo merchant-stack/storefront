@@ -11,7 +11,8 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   if (!item) notFound();
 
   const unavailable = item.available === false;
-  const purchasable = item.purchasable !== false;
+  const purchasable = item.status === 'in_stock';
+  const isComingSoon = item.status === 'coming_soon';
   const rarity = rarityClasses(item.rarity);
 
   // Related: latest same-type items, excluding this one.
@@ -50,7 +51,11 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
             ) : (
               <div className="flex h-full w-full items-center justify-center text-zinc-700">no image</div>
             )}
-            {!purchasable ? (
+            {isComingSoon ? (
+              <span className="absolute left-4 top-4 rounded-md border border-sky-400/40 bg-sky-500/15 px-2 py-1 text-xs font-medium uppercase tracking-wider text-sky-300 backdrop-blur">
+                Coming soon
+              </span>
+            ) : !purchasable ? (
               <span className="absolute left-4 top-4 rounded-md border border-amber-400/40 bg-amber-500/15 px-2 py-1 text-xs font-medium uppercase tracking-wider text-amber-300 backdrop-blur">
                 Restocking soon
               </span>
@@ -100,6 +105,24 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                     </svg>
                   </button>
                 </form>
+              ) : isComingSoon ? (
+                <div className="mt-6 rounded-lg border border-sky-500/30 bg-sky-500/[0.06] p-4">
+                  <div className="flex items-start gap-3 text-sm text-sky-200">
+                    <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    <div>
+                      <div className="font-semibold">Awaiting restock</div>
+                      <div className="mt-1 text-sky-200/80">
+                        This skin isn&apos;t in our stock yet — we&apos;re sourcing it now. Browse
+                        items we already have, or check back soon.
+                      </div>
+                    </div>
+                  </div>
+                  <Link href="/market?sort=price_asc" className="btn-secondary mt-4 w-full py-2.5 text-sm">
+                    Browse available skins
+                  </Link>
+                </div>
               ) : (
                 <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-4">
                   <div className="flex items-start gap-3 text-sm text-amber-200">

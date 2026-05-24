@@ -1,5 +1,8 @@
 import { API_URL } from './api';
 
+/** Why a card is or isn't buyable right now. Drives badge text + CTA in ItemCard. */
+export type ItemStatus = 'in_stock' | 'restocking' | 'coming_soon';
+
 export interface ItemDTO {
   id: string;
   displayName: string;
@@ -11,7 +14,9 @@ export interface ItemDTO {
   rarity: string | null;
   salePriceMinor: number;
   currency: string;
-  /** False when the item is currently above our fulfilment ceiling — UI shows "restocking soon". */
+  /** Storefront state — see ItemStatus. Set server-side, never trust a client override. */
+  status: ItemStatus;
+  /** Convenience flag = (status === 'in_stock'). Kept for code that doesn't switch on status. */
   purchasable: boolean;
   available?: boolean;
   lastSyncedAt: string;

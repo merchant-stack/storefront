@@ -102,6 +102,12 @@ enum SourceProvider {
   WAXPEER
   RUSTTM
   OWN_INVENTORY
+  // Placeholder catalog entries we DON'T have in our bot inventory but want
+  // to display to make the storefront feel fuller. Always priced from
+  // public market data, never purchasable (the api rejects checkout for
+  // SHOWCASE provider and the web shows a "coming soon" badge). Refreshed
+  // by the sync job alongside OWN_INVENTORY items.
+  SHOWCASE
 }
 
 /// Items we offer for sale on the storefront, sourced from external marketplaces.

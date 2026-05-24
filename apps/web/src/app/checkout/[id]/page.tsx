@@ -9,7 +9,12 @@ export default async function CheckoutPage({ params }: { params: Promise<{ id: s
   const item = await getItem(id);
   if (!item) notFound();
 
+  // Gating: SHOWCASE items can never be checked out — we don't actually stock
+  // them. If a user direct-links here (the market detail page already hides
+  // the Buy CTA for showcase items, but URL guessing / shared links are
+  // possible), show the same "coming soon" copy instead of a paying CTA.
   const available = item.available !== false;
+  const buyable = available && item.status === 'in_stock';
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
@@ -69,11 +74,16 @@ export default async function CheckoutPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="mt-8">
-        {available ? (
+        {buyable ? (
           <CheckoutButton
             sourceItemId={item.id}
             label={`Pay ${formatPrice(item.salePriceMinor, item.currency)}`}
           />
+        ) : item.status === 'coming_soon' ? (
+          <div className="card border-sky-500/30 bg-sky-500/[0.06] p-4 text-center text-sm text-sky-200">
+            This skin is awaiting restock — we&apos;re sourcing it now. Browse the rest of
+            the market for items in stock today.
+          </div>
         ) : (
           <div className="card p-4 text-center text-sm text-zinc-400">
             This item is no longer available.

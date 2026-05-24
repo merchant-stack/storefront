@@ -58,6 +58,10 @@ const schema = z.object({
   MERCHANT_COBALT_WEBHOOK_SECRET: optionalNonEmpty,
   // Where we POST the signed payload. Must be HTTPS in production.
   MERCHANT_COBALT_WEBHOOK_URL: z.string().url().optional(),
+  // Showcase ratio: max % of catalog that can be "coming soon" placeholders
+  // (vs. real bot inventory). 50 = at most 1 placeholder per 1 real item.
+  // 0 = disable showcase entirely (catalog == real inventory only).
+  SHOWCASE_MAX_RATIO_PCT: z.coerce.number().int().min(0).max(80).default(50),
 });
 
 const parsed = schema.safeParse(process.env);

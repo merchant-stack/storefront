@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { ItemDTO } from '@/lib/items';
+import type { ItemDTO, ItemStatus } from '@/lib/items';
 import { formatPrice } from '@/lib/format';
 import { rarityClasses } from '@/lib/rarity';
 
@@ -7,9 +7,32 @@ interface Props {
   item: ItemDTO;
 }
 
+interface BadgeStyle {
+  text: string;
+  classes: string;
+  cta: string;
+}
+
+// Per-status visual treatment. Keeping it in one place so we can adjust copy
+// without grepping for "Coming soon" strings across the UI.
+const STATUS_BADGE: Record<ItemStatus, BadgeStyle | null> = {
+  in_stock: null, // No badge — Buy CTA does the talking.
+  restocking: {
+    text: 'Restocking',
+    classes: 'border-amber-400/40 bg-amber-500/10 text-amber-300',
+    cta: 'Soon',
+  },
+  coming_soon: {
+    text: 'Coming soon',
+    classes: 'border-sky-400/40 bg-sky-500/10 text-sky-300',
+    cta: 'Awaiting restock',
+  },
+};
+
 export const ItemCard = ({ item }: Props) => {
   const rarity = rarityClasses(item.rarity);
-  const purchasable = item.purchasable !== false;
+  const purchasable = item.status === 'in_stock';
+  const badge = STATUS_BADGE[item.status];
   return (
     <Link
       href={`/market/${item.id}`}
@@ -40,9 +63,11 @@ export const ItemCard = ({ item }: Props) => {
             {item.rarity}
           </span>
         ) : null}
-        {!purchasable ? (
-          <span className="absolute left-3 top-3 rounded-md border border-amber-400/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-300 backdrop-blur">
-            Restocking
+        {badge ? (
+          <span
+            className={`absolute left-3 top-3 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider backdrop-blur ${badge.classes}`}
+          >
+            {badge.text}
           </span>
         ) : null}
       </div>
@@ -64,10 +89,12 @@ export const ItemCard = ({ item }: Props) => {
             className={`text-xs ${
               purchasable
                 ? 'text-zinc-500 transition-colors group-hover:text-brand'
-                : 'text-amber-300/70'
+                : item.status === 'coming_soon'
+                  ? 'text-sky-300/70'
+                  : 'text-amber-300/70'
             }`}
           >
-            {purchasable ? 'Buy →' : 'Soon'}
+            {purchasable ? 'Buy →' : (badge?.cta ?? 'Soon')}
           </span>
         </div>
       </div>
