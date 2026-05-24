@@ -38,6 +38,12 @@ export interface SyncDMarketJob {
   limit?: number;
 }
 
+interface BotInventoryTag {
+  category?: string;
+  name?: string;
+  internal_name?: string;
+}
+
 interface BotInventoryItem {
   appid: number;
   contextid: string | number;
@@ -46,6 +52,21 @@ interface BotInventoryItem {
   icon_url?: string;
   name_color?: string;
   type?: string;
+  tags?: BotInventoryTag[];
+}
+
+/**
+ * Steam inventory entries put a generic "Workshop Item" or "" in the top-level
+ * `type` field for most Rust skins, which is useless as a storefront category.
+ * The actually-useful classification lives in `tags[]` under the
+ * `itemclass` category — e.g. "TShirt", "AssaultRifle", "Door", "Pickaxe".
+ * Prefer that; fall back to the top-level type only if no itemclass tag exists.
+ */
+function resolveItemType(item: BotInventoryItem): string | undefined {
+  const itemclass = item.tags?.find((t) => t.category === 'itemclass')?.name;
+  if (itemclass && itemclass.length > 0) return itemclass;
+  if (item.type && item.type.length > 0) return item.type;
+  return undefined;
 }
 
 export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
@@ -142,7 +163,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
         displayName: item.market_hash_name,
         iconUrl,
         iconBackgroundColor: null,
-        type: item.type,
+        type: resolveItemType(item),
         rarity: null,
         sourcePriceMinor,
         salePriceMinor,
@@ -156,7 +177,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
         marketHashName: item.market_hash_name,
         displayName: item.market_hash_name,
         iconUrl,
-        type: item.type,
+        type: resolveItemType(item),
         sourcePriceMinor,
         salePriceMinor,
         markupBps,
