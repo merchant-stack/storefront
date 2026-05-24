@@ -42,12 +42,31 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
-      <body className="flex min-h-screen flex-col font-sans text-zinc-100 antialiased">
-        <Header />
-        <div className="flex-1">{children}</div>
-        <Footer />
-        <CookieBanner />
+    <html
+      lang="en"
+      className={`${inter.variable} ${outfit.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      {/*
+       * suppressHydrationWarning + wrapping the whole React tree in a single
+       * #app div isolates React's reconciliation from third-party DOM mutation.
+       * Specifically: Yandex.Browser injects service-icon SVGs directly into
+       * <body> on every navigation. Without the wrapper, React's body-child
+       * `insertBefore` operations bumped into the injected nodes and crashed
+       * the whole client tree with "Failed to execute 'insertBefore' on Node".
+       * With the wrapper, the extension's nodes live as siblings of #app and
+       * React only ever traverses inside #app.
+       */}
+      <body
+        className="flex min-h-screen flex-col font-sans text-zinc-100 antialiased"
+        suppressHydrationWarning
+      >
+        <div id="app" className="flex min-h-screen flex-col">
+          <Header />
+          <div className="flex-1">{children}</div>
+          <Footer />
+          <CookieBanner />
+        </div>
       </body>
     </html>
   );

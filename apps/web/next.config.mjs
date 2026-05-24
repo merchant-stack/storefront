@@ -15,7 +15,13 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   // Item icons come from Steam's CDNs + dev placeholder host. Add more if other
   // sources (e.g. dmarket cdn) start appearing in payloads.
-  "img-src 'self' data: blob: https://community.cloudflare.steamstatic.com https://steamcommunity-a.akamaihd.net https://placehold.co",
+  //
+  // yastatic.net is whitelisted so Yandex.Browser's auto-injected service-icon
+  // SVGs (service_logo.svg / service_name.svg) load instead of being blocked.
+  // When CSP blocks those, the extension's retry logic was mutating the DOM
+  // aggressively enough to crash React's reconciliation. See layout.tsx
+  // wrapper-div comment for the parallel runtime fix.
+  "img-src 'self' data: blob: https://community.cloudflare.steamstatic.com https://steamcommunity-a.akamaihd.net https://placehold.co https://yastatic.net",
   "font-src 'self' data:",
   // API + Stripe are the only allowed XHR/fetch targets.
   `connect-src 'self' ${API_URL} https://api.stripe.com`,
