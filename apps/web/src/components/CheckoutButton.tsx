@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { WhopCheckoutEmbed } from '@whop/checkout/react';
 import { API_URL } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
 
@@ -16,6 +18,11 @@ type CheckoutError =
   | { kind: 'not_authenticated' }
   | { kind: 'stale'; lastKnownPrice: number; lastKnownCurrency: string };
 
+type CheckoutSession = {
+  orderId: string;
+  planId: string;
+};
+
 // Global kill-switch. Read at build time from NEXT_PUBLIC_CHECKOUT_DISABLED.
 // Must match the server's CHECKOUT_DISABLED env. When true, the buy button
 // is replaced with a "launching soon" notice and POST /api/checkout is not
@@ -23,16 +30,31 @@ type CheckoutError =
 const CHECKOUT_DISABLED = process.env.NEXT_PUBLIC_CHECKOUT_DISABLED === 'true';
 
 export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<CheckoutError | null>(null);
+  // Once we've POSTed /api/checkout and have a provider session, we swap from
+  // the button view to an inline Whop embedded-checkout iframe. The buyer
+  // never leaves rustsupply.com.
+  const [session, setSession] = useState<CheckoutSession | null>(null);
 
   if (CHECKOUT_DISABLED) {
     return (
       <div className="flex flex-col gap-2">
         <div className="card flex items-center gap-3 border-amber-500/30 bg-amber-500/[0.04] px-4 py-3.5 text-sm text-amber-200">
-          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z" />
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 8v4m0 4h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z"
+            />
           </svg>
           <div>
             <p className="font-medium text-amber-100">Sales launching soon</p>
@@ -42,6 +64,29 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
             </p>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Embedded checkout is mounted as soon as we have a session.
+  if (session) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="rounded-xl border border-white/[0.08] bg-zinc-950/60 p-1">
+          <WhopCheckoutEmbed
+            planId={session.planId}
+            theme="dark"
+            styles={{ container: { paddingX: 0, paddingY: 16 } }}
+            onComplete={(_planId, _receiptId) => {
+              // Server already updates the Order via webhook. Take the buyer
+              // to the order page so they can watch fulfilment progress.
+              router.push(`/order/${session.orderId}`);
+            }}
+          />
+        </div>
+        <p className="text-center text-xs text-zinc-500">
+          Payment processed by Whop · Your card details never touch our servers.
+        </p>
       </div>
     );
   }
@@ -70,10 +115,19 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
           // Fetch the current server snapshot so the buyer sees the latest
           // price + availability instead of being told to manually refresh.
           const fresh = await fetch(`${API_URL}/api/items/${sourceItemId}`, { cache: 'no-store' })
-            .then((r) => (r.ok ? (r.json() as Promise<{ item: { salePriceMinor: number; currency: string; available?: boolean } }>) : null))
+            .then((r) =>
+              r.ok
+                ? (r.json() as Promise<{
+                    item: { salePriceMinor: number; currency: string; available?: boolean };
+                  }>)
+                : null,
+            )
             .catch(() => null);
           if (!fresh || fresh.item.available === false) {
-            setError({ kind: 'text', message: 'This skin just sold out. Browse the market for similar items.' });
+            setError({
+              kind: 'text',
+              message: 'This skin just sold out. Browse the market for similar items.',
+            });
             return;
           }
           setError({
@@ -92,8 +146,21 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
         setError({ kind: 'text', message: friendly });
         return;
       }
-      const data = (await res.json()) as { redirectUrl: string };
-      window.location.href = data.redirectUrl;
+      const data = (await res.json()) as {
+        orderId: string;
+        redirectUrl: string;
+        providerSessionId?: string;
+        providerId?: string;
+      };
+      // Prefer embedded checkout. If for some reason the server didn't expose
+      // a providerSessionId (older deploy, non-Whop provider, etc.), fall
+      // back to the hosted redirect URL so the buyer still completes
+      // payment one way or another.
+      if (data.providerSessionId) {
+        setSession({ orderId: data.orderId, planId: data.providerSessionId });
+      } else {
+        window.location.href = data.redirectUrl;
+      }
     } catch (err) {
       setError({ kind: 'text', message: err instanceof Error ? err.message : 'Network error' });
     } finally {
@@ -123,12 +190,18 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
       >
         {pending ? (
           <>
-            <Spinner /> Redirecting…
+            <Spinner /> Preparing checkout…
           </>
         ) : (
           <>
             {label}
-            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth={2.5}>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              className="h-4 w-4"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
             </svg>
           </>
@@ -138,7 +211,11 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-3 text-sm text-amber-200">
           <p className="font-medium">Price just updated</p>
           <p className="mt-0.5 text-amber-300/80">
-            Latest price: <span className="font-mono font-semibold text-amber-100">{formatPrice(error.lastKnownPrice, error.lastKnownCurrency)}</span>. Continue to checkout?
+            Latest price:{' '}
+            <span className="font-mono font-semibold text-amber-100">
+              {formatPrice(error.lastKnownPrice, error.lastKnownCurrency)}
+            </span>
+            . Continue to checkout?
           </p>
           <button
             type="button"
@@ -155,14 +232,20 @@ export const CheckoutButton = ({ sourceItemId, label = 'Pay now' }: Props) => {
           <p className="mt-0.5 text-amber-300/80">
             We need it to deliver the skin to your account.
           </p>
-          <Link href="/account" className="mt-2 inline-flex text-sm font-medium text-amber-100 underline underline-offset-2 hover:text-white">
+          <Link
+            href="/account"
+            className="mt-2 inline-flex text-sm font-medium text-amber-100 underline underline-offset-2 hover:text-white"
+          >
             Go to account →
           </Link>
         </div>
       ) : error?.kind === 'not_authenticated' ? (
         <div className="rounded-lg border border-sky-500/20 bg-sky-500/[0.04] px-3 py-2.5 text-sm text-sky-200">
           <p>Please sign in with Steam to continue.</p>
-          <Link href="/account" className="mt-2 inline-flex text-sm font-medium text-sky-100 underline underline-offset-2 hover:text-white">
+          <Link
+            href="/account"
+            className="mt-2 inline-flex text-sm font-medium text-sky-100 underline underline-offset-2 hover:text-white"
+          >
             Go to sign in →
           </Link>
         </div>

@@ -9,9 +9,11 @@ const csp = [
   // inline only for the small Next runtime + nonce-less style tags Next emits
   // (Tailwind compiled output is in self CSS files). Tightening further would
   // require a nonce-aware Next setup — defer.
+  // js.whop.com hosts the embed loader (@whop/checkout) — required for the
+  // in-page Whop checkout iframe on /checkout/[id].
   IS_PROD
-    ? "script-src 'self' 'unsafe-inline'"
-    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    ? "script-src 'self' 'unsafe-inline' https://js.whop.com"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.whop.com",
   "style-src 'self' 'unsafe-inline'",
   // Item icons come from Steam's CDNs + dev placeholder host. Add more if other
   // sources (e.g. dmarket cdn) start appearing in payloads.
@@ -23,8 +25,12 @@ const csp = [
   // wrapper-div comment for the parallel runtime fix.
   "img-src 'self' data: blob: https://community.cloudflare.steamstatic.com https://steamcommunity-a.akamaihd.net https://placehold.co https://yastatic.net",
   "font-src 'self' data:",
-  // API + Stripe are the only allowed XHR/fetch targets.
-  `connect-src 'self' ${API_URL} https://api.stripe.com`,
+  // API + Stripe + Whop embed callbacks are the only allowed XHR/fetch targets.
+  `connect-src 'self' ${API_URL} https://api.stripe.com https://js.whop.com https://whop.com`,
+  // Whop's embed mounts an iframe pointing at whop.com / js.whop.com to render
+  // the actual card form; we need to allow it explicitly because frame-src
+  // defaults to default-src (= 'self') under our policy.
+  "frame-src 'self' https://js.whop.com https://whop.com",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",

@@ -67,6 +67,10 @@ export interface CreateSessionResult {
   paymentId: string;
   redirectUrl: string;
   providerId: PaymentProviderId;
+  /** Pass-through of the provider-side session/plan id. For Whop this is the
+   *  plan_xxx string the embedded-checkout iframe needs; for other providers
+   *  the analogous identifier (e.g. Stripe checkout_session_xxx). */
+  providerSessionId: string;
 }
 
 const buildSuccessUrl = (orderId: string): string =>
@@ -130,7 +134,12 @@ export const createPaymentSession = async (
     },
   });
 
-  return { paymentId: payment.id, redirectUrl: session.redirectUrl, providerId: provider.id };
+  return {
+    paymentId: payment.id,
+    redirectUrl: session.redirectUrl,
+    providerId: provider.id,
+    providerSessionId: session.providerSessionId,
+  };
 };
 
 export interface FinalizeOrderInput {

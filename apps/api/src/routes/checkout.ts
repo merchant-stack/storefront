@@ -164,7 +164,13 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
 
     return reply.code(201).send({
       orderId: created.order.id,
+      // redirectUrl is the legacy hosted-checkout URL — kept for fallback if
+      // the embedded iframe fails to mount. With Whop's embedded checkout
+      // (web mounts <WhopCheckoutEmbed planId={providerSessionId} />),
+      // the buyer pays without ever leaving rustsupply.com.
       redirectUrl: result.redirectUrl,
+      providerSessionId: result.providerSessionId,
+      providerId: providerId ?? 'WHOP',
     });
   });
 
