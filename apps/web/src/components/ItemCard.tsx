@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ItemDTO, ItemStatus } from '@/lib/items';
 import { formatPrice } from '@/lib/format';
 import { rarityClasses } from '@/lib/rarity';
+import { SkinPlaceholder } from './SkinPlaceholder';
 
 interface Props {
   item: ItemDTO;
@@ -54,7 +55,7 @@ export const ItemCard = ({ item }: Props) => {
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-zinc-700">no image</div>
+          <SkinPlaceholder name={item.displayName} />
         )}
         {item.rarity ? (
           <span

@@ -4,6 +4,7 @@ import { getItem, getItems } from '@/lib/items';
 import { formatPrice } from '@/lib/format';
 import { rarityClasses } from '@/lib/rarity';
 import { ItemCard } from '@/components/ItemCard';
+import { SkinPlaceholder } from '@/components/SkinPlaceholder';
 
 export default async function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,7 +50,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
                 className="h-full w-full object-contain drop-shadow-[0_30px_80px_rgba(0,0,0,0.6)]"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-zinc-700">no image</div>
+              <SkinPlaceholder name={item.displayName} textClassName="text-7xl" />
             )}
             {isComingSoon ? (
               <span className="absolute left-4 top-4 rounded-md border border-sky-400/40 bg-sky-500/15 px-2 py-1 text-xs font-medium uppercase tracking-wider text-sky-300 backdrop-blur">
