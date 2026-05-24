@@ -93,6 +93,16 @@ const schema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // --- Merchant deposit-gateway: cobalt.skin (Phase 1, single merchant in env) ---
+  // API secret the merchant uses to HMAC-sign POST /api/merchant/sessions
+  // requests. We verify with the same secret. Rotate by changing this env
+  // var on both sides simultaneously.
+  MERCHANT_COBALT_API_SECRET: optionalNonEmpty,
+  // Comma-separated list of return-URL host names we accept on inbound
+  // session-create requests. Defends against open-redirect: a hacker who
+  // somehow gets a session created can't fish buyers off to evil.com.
+  // Example: "cobalt.skin,www.cobalt.skin".
+  MERCHANT_COBALT_ALLOWED_RETURN_DOMAINS: z.string().default(''),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -105,6 +115,13 @@ const extraOrigins = parsed.data.CORS_EXTRA_ORIGINS
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+
+const merchantCobaltAllowedReturnDomains = new Set(
+  parsed.data.MERCHANT_COBALT_ALLOWED_RETURN_DOMAINS
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 const mockPaymentsAllowedSteamIds = new Set(
   parsed.data.MOCK_PAYMENTS_ALLOWED_STEAM_IDS
@@ -130,4 +147,6 @@ export const env = {
   ALLOWED_ORIGINS: [parsed.data.WEB_ORIGIN, ...extraOrigins],
   /** Parsed MOCK_PAYMENTS_ALLOWED_STEAM_IDS as a Set for O(1) membership checks. */
   MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET: mockPaymentsAllowedSteamIds,
+  /** Pre-parsed lowercased allowlist of return-URL host names for cobalt.skin merchant. */
+  MERCHANT_COBALT_ALLOWED_RETURN_DOMAINS_SET: merchantCobaltAllowedReturnDomains,
 };

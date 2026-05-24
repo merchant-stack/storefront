@@ -11,7 +11,7 @@ import {
   type PaymentProviderId,
   type PaymentRegistry,
 } from '@rustskinpay/shared/payments';
-import { enqueueBuyAndDispatch } from './trade-queue.js';
+import { enqueueBuyAndDispatch, enqueueMerchantWebhook } from './trade-queue.js';
 import { env } from '../env.js';
 
 // Singleton registry instance. Constructed lazily so tests can override.
@@ -149,15 +149,28 @@ export interface FinalizeOrderInput {
   buyerEmail?: string;
 }
 
+/** Decision made inside the finalize transaction about what happens next. */
+type FinalizeOutcome =
+  | { kind: 'none' }
+  | { kind: 'buy_and_dispatch'; orderId: string }
+  | { kind: 'merchant_webhook'; webhookId: string };
+
 /**
  * Mark an order as PAID and start fulfilment. Idempotent: a no-op if the order
- * is already PAID/FULFILLED. If the buyer has no trade URL, fulfilment is held
- * (Order still goes PAID) and ops/UI can prompt the buyer.
+ * is already PAID/FULFILLED.
+ *
+ * Routing on PAID is based on the merchant the order belongs to:
+ *   - Internal merchant (the rustsupply storefront): fulfilment is the
+ *     buy-and-dispatch worker that buys the skin / dispatches from the bot.
+ *     Held if the buyer has no Steam trade URL — ops can prompt them.
+ *   - External merchant (e.g. cobalt.skin deposit gateway): we don't deliver
+ *     anything ourselves; we just notify the merchant via an outbound
+ *     HMAC-signed webhook so they can credit their user's balance.
  */
 export const finalizeOrderPayment = async (
   input: FinalizeOrderInput,
-): Promise<{ buyAndDispatchEnqueued: boolean }> => {
-  const enqueueBuy = await prisma.$transaction(async (tx) => {
+): Promise<{ buyAndDispatchEnqueued: boolean; merchantWebhookEnqueued: boolean }> => {
+  const outcome = await prisma.$transaction(async (tx): Promise<FinalizeOutcome> => {
     const paymentWhere: Prisma.PaymentWhereInput = input.providerSessionId
       ? { providerSessionId: input.providerSessionId, status: { in: ['PENDING', 'PROCESSING'] } }
       : { orderId: input.orderId, status: { in: ['PENDING', 'PROCESSING'] } };
@@ -175,10 +188,10 @@ export const finalizeOrderPayment = async (
 
     const order = await tx.order.findUnique({
       where: { id: input.orderId },
-      include: { buyer: true },
+      include: { buyer: true, merchant: true },
     });
     if (!order || order.status === 'PAID' || order.status === 'FULFILLED') {
-      return false;
+      return { kind: 'none' };
     }
 
     if (input.buyerEmail) {
@@ -196,25 +209,90 @@ export const finalizeOrderPayment = async (
     }
 
     // Race-safe state transition: only PENDING_PAYMENT → PAID succeeds. If a
-    // concurrent webhook delivery already flipped the row (Stripe retry
+    // concurrent webhook delivery already flipped the row (PSP retry
     // overlapping the original, or two interpreted events for the same order),
-    // the updateMany count is 0 and we must NOT enqueue buyAndDispatch again —
-    // otherwise the worker buys the item from Waxpeer twice.
+    // the updateMany count is 0 and we must NOT enqueue downstream work
+    // again — otherwise the worker buys twice / notifies the merchant twice.
     const flipped = await tx.order.updateMany({
       where: { id: input.orderId, status: 'PENDING_PAYMENT' },
       data: { status: 'PAID', paidAt: new Date() },
     });
-    if (flipped.count === 0) return false;
+    if (flipped.count === 0) return { kind: 'none' };
 
-    return Boolean(order.buyer?.tradeUrl);
+    // Branch on merchant type. The Order row carries this via the related
+    // Merchant.isInternal flag (true for our own storefront, false for
+    // external integrators like cobalt.skin).
+    if (!order.merchant.isInternal) {
+      const meta = (order.metadata ?? {}) as Record<string, unknown>;
+      const merchantOrderId = typeof meta.merchantOrderId === 'string' ? meta.merchantOrderId : null;
+      const userIdentifier = typeof meta.userIdentifier === 'string' ? meta.userIdentifier : null;
+      const merchantMetadata =
+        typeof meta.merchantMetadata === 'object' && meta.merchantMetadata !== null
+          ? meta.merchantMetadata
+          : null;
+
+      // Build the canonical payload here. The worker that delivers it can
+      // sign with a fresh timestamp on each retry, but the payload body
+      // itself is frozen so the merchant gets a consistent message across
+      // retries (and can dedupe by eventId).
+      const eventId = `evt_${cuidish()}`;
+      const payload = {
+        event: 'session.paid' as const,
+        event_id: eventId,
+        session_id: order.id,
+        merchant_order_id: merchantOrderId,
+        amount_minor: order.totalAmountMinor,
+        currency: order.currency,
+        paid_at: new Date().toISOString(),
+        user_identifier: userIdentifier,
+        metadata: merchantMetadata,
+      };
+
+      const webhook = await tx.merchantOutboundWebhook.create({
+        data: {
+          merchantId: order.merchantId,
+          orderId: order.id,
+          eventId,
+          eventType: 'session.paid',
+          payload,
+        },
+      });
+
+      return { kind: 'merchant_webhook', webhookId: webhook.id };
+    }
+
+    // Internal-storefront flow: enqueue buy-and-dispatch only when the buyer
+    // has a Steam trade URL. Without it the bot can't deliver, so we leave
+    // the Order in PAID and surface a prompt in the UI.
+    if (order.buyer?.tradeUrl) {
+      return { kind: 'buy_and_dispatch', orderId: input.orderId };
+    }
+    return { kind: 'none' };
   });
 
-  if (enqueueBuy) {
-    await enqueueBuyAndDispatch(input.orderId);
+  // Outside the transaction so a BullMQ enqueue failure doesn't roll back
+  // the PAID state. Worst case: order is PAID but the job didn't enqueue —
+  // ops can replay manually via a script.
+  if (outcome.kind === 'buy_and_dispatch') {
+    await enqueueBuyAndDispatch(outcome.orderId);
+    return { buyAndDispatchEnqueued: true, merchantWebhookEnqueued: false };
   }
-
-  return { buyAndDispatchEnqueued: enqueueBuy };
+  if (outcome.kind === 'merchant_webhook') {
+    await enqueueMerchantWebhook(outcome.webhookId);
+    return { buyAndDispatchEnqueued: false, merchantWebhookEnqueued: true };
+  }
+  return { buyAndDispatchEnqueued: false, merchantWebhookEnqueued: false };
 };
+
+// Cuid-ish identifier without pulling another dep. The merchant doesn't see
+// our DB-row id (that's `MerchantOutboundWebhook.id`), they see the public
+// `eventId` we put in the payload + the X-Event-Id header.
+function cuidish(): string {
+  return (
+    Date.now().toString(36) +
+    Math.random().toString(36).slice(2, 10)
+  );
+}
 
 /**
  * Abort a PENDING_PAYMENT order: mark payments FAILED, flip the Order to

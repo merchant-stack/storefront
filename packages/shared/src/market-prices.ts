@@ -81,6 +81,8 @@ export interface MultiSourcePriceIndex {
   size: number;
   /** Per-source counts, for logging. */
   perSource: Record<string, number>;
+  /** Iterate over every known {hashName, priceMinor} pair (max across sources). Used by cover-SKU picker. */
+  entries(): Array<{ marketHashName: string; priceMinor: number }>;
 }
 
 export async function loadMarketPriceIndex(): Promise<MultiSourcePriceIndex> {
@@ -99,16 +101,30 @@ export async function loadMarketPriceIndex(): Promise<MultiSourcePriceIndex> {
   const combinedNames = new Set<string>();
   for (const s of sources) for (const k of s.index.keys()) combinedNames.add(k);
 
+  // Precompute the max-across-sources price for every hash name so entries()
+  // is an O(N) projection rather than O(N × S) per call. Cheap one-time cost
+  // at index-load time; saves work if the cover-SKU picker scans repeatedly.
+  const combined = new Map<string, number>();
+  for (const name of combinedNames) {
+    let best: number | null = null;
+    for (const s of sources) {
+      const p = s.index.get(name);
+      if (p !== undefined && (best === null || p > best)) best = p;
+    }
+    if (best !== null) combined.set(name, best);
+  }
+
   return {
     bestFor(marketHashName: string): number | null {
-      let best: number | null = null;
-      for (const s of sources) {
-        const p = s.index.get(marketHashName);
-        if (p !== undefined && (best === null || p > best)) best = p;
-      }
-      return best;
+      return combined.get(marketHashName) ?? null;
     },
     size: combinedNames.size,
     perSource: Object.fromEntries(sources.map((s) => [s.name, s.index.size])),
+    entries(): Array<{ marketHashName: string; priceMinor: number }> {
+      return Array.from(combined.entries()).map(([marketHashName, priceMinor]) => ({
+        marketHashName,
+        priceMinor,
+      }));
+    },
   };
 }

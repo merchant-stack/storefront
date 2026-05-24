@@ -13,6 +13,8 @@
     "./waxpeer": "./src/waxpeer.ts",
     "./rusttm": "./src/rusttm.ts",
     "./market-prices": "./src/market-prices.ts",
+    "./merchant-hmac": "./src/merchant-hmac.ts",
+    "./cover-sku": "./src/cover-sku.ts",
     "./payments": "./src/payments/index.ts"
   },
   "scripts": {

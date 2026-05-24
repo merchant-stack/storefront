@@ -7,17 +7,20 @@ import {
   DMARKET_SYNC_QUEUE,
   BUY_AND_DISPATCH_QUEUE,
   POLL_TRADE_STATUS_QUEUE,
+  MERCHANT_WEBHOOK_QUEUE,
   dmarketSyncQueue,
   pollTradeStatusQueue,
   type TradeDispatchJob,
   type SyncDMarketJobData,
   type BuyAndDispatchJobData,
   type PollTradeStatusJobData,
+  type MerchantWebhookJobData,
 } from './queue.js';
 import { dispatchTrade } from './jobs/dispatch-trade.js';
 import { syncDMarket } from './jobs/sync-dmarket.js';
 import { buyAndDispatch } from './jobs/buy-and-dispatch.js';
 import { pollTradeStatus } from './jobs/poll-trade-status.js';
+import { deliverMerchantWebhook } from './jobs/deliver-merchant-webhook.js';
 import { jobsProcessed, startHealthServer, stopHealthServer } from './health-server.js';
 
 const log = pino({
@@ -69,7 +72,16 @@ const pollTradeStatusWorker = new Worker<PollTradeStatusJobData>(
   { connection, concurrency: 1 },
 );
 
-for (const w of [tradeWorker, dmarketSyncWorker, buyAndDispatchWorker, pollTradeStatusWorker]) {
+const merchantWebhookWorker = new Worker<MerchantWebhookJobData>(
+  MERCHANT_WEBHOOK_QUEUE,
+  async (job) => {
+    log.info({ jobId: job.id, webhookId: job.data.webhookId }, 'processing merchant webhook');
+    await deliverMerchantWebhook(job);
+  },
+  { connection, concurrency: 4 },
+);
+
+for (const w of [tradeWorker, dmarketSyncWorker, buyAndDispatchWorker, pollTradeStatusWorker, merchantWebhookWorker]) {
   w.on('completed', (job) => {
     log.info({ queue: w.name, jobId: job.id }, 'job completed');
     jobsProcessed.inc({ queue: w.name, outcome: 'success' });
@@ -164,6 +176,7 @@ const shutdown = async (signal: string): Promise<void> => {
     dmarketSyncWorker.close(),
     buyAndDispatchWorker.close(),
     pollTradeStatusWorker.close(),
+    merchantWebhookWorker.close(),
   ]);
   await connection.quit();
   process.exit(0);

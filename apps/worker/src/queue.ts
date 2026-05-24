@@ -6,6 +6,7 @@ export const TRADE_DISPATCH_QUEUE = 'trade-dispatch';
 export const DMARKET_SYNC_QUEUE = 'dmarket-sync';
 export const BUY_AND_DISPATCH_QUEUE = 'buy-and-dispatch';
 export const POLL_TRADE_STATUS_QUEUE = 'poll-trade-status';
+export const MERCHANT_WEBHOOK_QUEUE = 'merchant-webhook';
 
 export interface TradeDispatchJob {
   tradeId: string;
@@ -21,6 +22,10 @@ export interface BuyAndDispatchJobData {
 }
 
 export type PollTradeStatusJobData = Record<string, never>;
+
+export interface MerchantWebhookJobData {
+  webhookId: string;
+}
 
 export const queueConnection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
@@ -39,5 +44,9 @@ export const buyAndDispatchQueue = new Queue<BuyAndDispatchJobData>(BUY_AND_DISP
 });
 
 export const pollTradeStatusQueue = new Queue<PollTradeStatusJobData>(POLL_TRADE_STATUS_QUEUE, {
+  connection: queueConnection,
+});
+
+export const merchantWebhookQueue = new Queue<MerchantWebhookJobData>(MERCHANT_WEBHOOK_QUEUE, {
   connection: queueConnection,
 });

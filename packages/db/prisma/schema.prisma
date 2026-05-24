@@ -361,6 +361,54 @@ model WebhookEvent {
 }
 
 // =========================================================================
+// Merchant-gateway outbound webhooks
+// =========================================================================
+//
+// When an Order belonging to a NON-internal Merchant (e.g. cobalt.skin) is
+// paid, we have to notify that merchant via their configured webhook URL.
+// One row per delivery attempt-chain: created when the Order flips PAID,
+// then the deliver-merchant-webhook worker updates `attempts` / `deliveredAt`
+// / `lastError` until it either succeeds or exhausts the retry schedule.
+//
+// Why not reuse WebhookEvent: WebhookEvent is INBOUND (from PSPs to us), with
+// payload-shape and idempotency tied to the PSP. This is OUTBOUND with
+// different shape and retry semantics. Keep them separated.
+
+enum MerchantOutboundWebhookStatus {
+  PENDING
+  DELIVERED
+  FAILED // permanent — all retry attempts exhausted
+}
+
+model MerchantOutboundWebhook {
+  id           String   @id @default(cuid())
+  merchantId   String
+  orderId      String
+  /// Idempotency key handed to the merchant in the payload + X-Event-Id header.
+  /// Stable across retries so the merchant can dedupe.
+  eventId      String   @unique
+  eventType    String // "session.paid" — extensible to session.refunded etc.
+  /// Frozen, signed payload as we'll POST it to the merchant. Captured at
+  /// enqueue time so retries don't recompute (and so order state changes
+  /// after enqueue can't accidentally alter the webhook body).
+  payload      Json
+  status       MerchantOutboundWebhookStatus @default(PENDING)
+  attempts     Int     @default(0)
+  /// Last response status code from the merchant, if any. Useful for
+  /// distinguishing "they 5xx'd" from "DNS failed" / "timed out".
+  lastStatusCode Int?
+  lastError    String?
+  lastAttemptAt DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([merchantId, createdAt(sort: Desc)])
+  @@index([orderId])
+}
+
+// =========================================================================
 // Audit log
 // =========================================================================
 

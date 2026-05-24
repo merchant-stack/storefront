@@ -50,6 +50,14 @@ const schema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(4001),
+  // --- Merchant deposit-gateway: cobalt.skin outbound webhook delivery ---
+  // Worker signs each outbound webhook with this HMAC secret. The merchant
+  // verifies with the same secret on their side. Different from the inbound
+  // MERCHANT_COBALT_API_SECRET (api/env.ts) by design — separate keys so a
+  // leak of one doesn't compromise both directions.
+  MERCHANT_COBALT_WEBHOOK_SECRET: optionalNonEmpty,
+  // Where we POST the signed payload. Must be HTTPS in production.
+  MERCHANT_COBALT_WEBHOOK_URL: z.string().url().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
