@@ -266,6 +266,76 @@ interface RefreshShowcaseInput {
   markupBps: number;
 }
 
+// Public Steam Community Market search — used only to resolve a real Steam
+// icon for SHOWCASE rows (no inventory of our own to read icon_url from).
+// Unauthenticated, lightly rate-limited; we space calls and tolerate failures
+// by leaving iconUrl null (SkinPlaceholder fallback then renders).
+const STEAM_MARKET_SEARCH_URL = 'https://steamcommunity.com/market/search/render/';
+const STEAM_RUST_APP_ID = 252490;
+const ICON_LOOKUP_TIMEOUT_MS = 8000;
+const ICON_LOOKUP_DELAY_MS = 600;
+// Cap per-sync Steam calls so a fresh-DB tick doesn't stall the sync job for
+// minutes. Anything beyond this gets resolved on a later tick.
+const ICON_LOOKUP_MAX_PER_SYNC = 25;
+
+interface SteamMarketSearchResult {
+  hash_name?: string;
+  asset_description?: {
+    icon_url?: string;
+  };
+}
+
+interface SteamMarketSearchResponse {
+  success?: boolean;
+  results?: SteamMarketSearchResult[];
+}
+
+async function resolveSteamMarketIcon(hashName: string): Promise<string | null> {
+  const url = new URL(STEAM_MARKET_SEARCH_URL);
+  url.searchParams.set('appid', String(STEAM_RUST_APP_ID));
+  url.searchParams.set('query', hashName);
+  url.searchParams.set('start', '0');
+  // count=5 (not 1) because Steam's search isn't an exact match — the
+  // requested hash_name may appear lower in the list when its name is a
+  // substring of others (e.g. "Pickaxe" vs "Bronze Pickaxe"). Filter by
+  // exact hash_name on the client side.
+  url.searchParams.set('count', '5');
+  url.searchParams.set('search_descriptions', '0');
+  url.searchParams.set('norender', '1');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ICON_LOOKUP_TIMEOUT_MS);
+  try {
+    const res = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: {
+        // Browser-looking UA lowers our chance of tripping Steam's bot
+        // heuristics on this endpoint. Not a guarantee — Steam may still 429.
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        Accept: 'application/json,text/plain,*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as SteamMarketSearchResponse;
+    if (!body.success || !Array.isArray(body.results)) return null;
+    const exact = body.results.find((r) => r.hash_name === hashName);
+    const iconHash = exact?.asset_description?.icon_url;
+    if (!iconHash) return null;
+    // steamcommunity-a.akamaihd.net is on the CSP + Next.js remotePatterns
+    // allowlist (apps/web/next.config.mjs) — same CDN we use for own-inventory.
+    return `https://steamcommunity-a.akamaihd.net/economy/image/${iconHash}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Upsert SHOWCASE rows so the visible catalog feels fuller. Idempotent across
  * sync ticks: items keep stable ids (sourceOfferId = market_hash_name) so a
@@ -336,9 +406,44 @@ async function refreshShowcaseCatalog(input: RefreshShowcaseInput): Promise<{
   const finalPicks = picked.slice(0, targetCount);
   const pickedHashes = new Set(finalPicks.map((p) => p.marketHashName));
 
+  // Pre-load any existing SHOWCASE icons so we don't re-fetch from Steam on
+  // every sync tick — iconUrl persists in DB across retire/unretire cycles.
+  const existing = await prisma.sourceItem.findMany({
+    where: {
+      provider: 'SHOWCASE',
+      sourceOfferId: { in: finalPicks.map((p) => p.marketHashName) },
+    },
+    select: { sourceOfferId: true, iconUrl: true },
+  });
+  const cachedIcons = new Map(existing.map((e) => [e.sourceOfferId, e.iconUrl]));
+
+  // Resolve icons for picks that don't have one cached yet. Sequential with
+  // a small delay to stay polite to Steam; bounded by ICON_LOOKUP_MAX_PER_SYNC
+  // so the worst-case first-run tick still finishes in reasonable time.
+  const resolvedIcons = new Map<string, string | null>();
+  let lookupAttempts = 0;
+  let lookupHits = 0;
+  for (const pick of finalPicks) {
+    const cached = cachedIcons.get(pick.marketHashName);
+    if (cached) {
+      resolvedIcons.set(pick.marketHashName, cached);
+      continue;
+    }
+    if (lookupAttempts >= ICON_LOOKUP_MAX_PER_SYNC) {
+      resolvedIcons.set(pick.marketHashName, null);
+      continue;
+    }
+    if (lookupAttempts > 0) await sleep(ICON_LOOKUP_DELAY_MS);
+    lookupAttempts += 1;
+    const icon = await resolveSteamMarketIcon(pick.marketHashName);
+    if (icon) lookupHits += 1;
+    resolvedIcons.set(pick.marketHashName, icon);
+  }
+
   let upserted = 0;
   for (const pick of finalPicks) {
     const salePriceMinor = applyMarkup(pick.priceMinor, input.markupBps);
+    const iconUrl = resolvedIcons.get(pick.marketHashName) ?? null;
     await prisma.sourceItem.upsert({
       where: {
         provider_sourceOfferId: {
@@ -352,11 +457,7 @@ async function refreshShowcaseCatalog(input: RefreshShowcaseInput): Promise<{
         gameId: input.gameId,
         marketHashName: pick.marketHashName,
         displayName: pick.marketHashName,
-        // Showcase items have no real Steam asset to pull an icon from. The
-        // ItemCard component already renders a "no image" placeholder for
-        // null iconUrl, so the visual is consistent. Future enhancement:
-        // resolve icons via Steam Community Market lookups.
-        iconUrl: null,
+        iconUrl,
         iconBackgroundColor: null,
         type: null,
         rarity: null,
@@ -373,11 +474,19 @@ async function refreshShowcaseCatalog(input: RefreshShowcaseInput): Promise<{
         salePriceMinor,
         markupBps: input.markupBps,
         available: true,
+        // Only write iconUrl in update when we resolved one — never overwrite
+        // a previously-cached icon with null if Steam happens to fail this tick.
+        ...(iconUrl ? { iconUrl } : {}),
         lastSyncedAt: new Date(),
       },
     });
     upserted += 1;
   }
+
+  log.info(
+    { lookupAttempts, lookupHits, cached: cachedIcons.size },
+    'showcase icon resolution',
+  );
 
   // Retire showcase rows that didn't make this tick's cut OR have since
   // appeared in real inventory (we don't want to double-up a placeholder
