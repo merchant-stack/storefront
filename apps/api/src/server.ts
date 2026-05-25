@@ -105,12 +105,14 @@ export const buildServer = (): FastifyInstance => {
   // Origin-check CSRF defense for state-changing requests. SameSite=Lax cookies
   // already block most CSRF, but a simple HTML form POST from another origin
   // still sends cookies and isn't preflighted by CORS. Reject any non-GET that
-  // doesn't come from our web origin. Exempt the Stripe webhook which is
-  // signed and authenticated by its own X-Signature header.
+  // doesn't come from our web origin. Exempt routes that authenticate
+  // themselves out-of-band (provider-signed webhooks, merchant gateway HMAC),
+  // since they never read buyer-session cookies — CSRF doesn't apply.
   server.addHook('onRequest', async (request, reply) => {
     const method = request.method.toUpperCase();
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
     if (request.url.startsWith('/api/webhooks/')) return; // signed by provider
+    if (request.url.startsWith('/api/merchant/')) return; // HMAC-signed merchant gateway
     const origin = request.headers.origin;
     const referer = request.headers.referer;
     // If neither origin nor referer is present, refuse (could be curl or
