@@ -68,6 +68,17 @@ get sent back to you when done.
 
 Both secrets must be kept server-side only. Never ship them to the browser.
 
+## What we'll need from you
+
+- The webhook URL on your side (where we POST signed payment events).
+- **Your server's egress IP(s)** — the public IPs your backend calls our
+  `/api/merchant/sessions` endpoint from. We add these to a server-side
+  allowlist so even a leaked `API_SECRET` can't be used from arbitrary
+  attacker IPs. A single IP, a small list, or a CIDR range all work. If
+  your egress IPs change (autoscaling, infra migration) just tell us and
+  we'll update the list — until then your requests will start returning 401. During the initial integration window we can leave the allowlist
+  open if you don't have stable IPs yet; switch on after you go to prod.
+
 ---
 
 ## Step 1: create a deposit session

@@ -23,6 +23,7 @@ import { resolveMerchantContext } from '../services/merchant.js';
 import { getMarketPriceIndex } from '../services/market-prices-cache.js';
 import { createPaymentSession } from '../services/payments.js';
 import { getRedis } from '../services/redis.js';
+import { isIpAllowed } from '../services/ip-allowlist.js';
 import { env } from '../env.js';
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,20 @@ export const registerMerchantSessionRoutes = (server: FastifyInstance): void => 
       // timing differences.
       const ctx = await resolveMerchantContext(merchantId);
       if (!ctx) {
+        return reply.code(401).send({ error: 'unauthorized' });
+      }
+
+      // IP allowlist check — runs BEFORE the (relatively expensive) HMAC
+      // verify so a stray scanner / attacker on the wrong IP doesn't even
+      // get a chance to brute-force signatures. Empty allowlist = disabled
+      // (relies on HMAC alone); see env MERCHANT_COBALT_ALLOWED_IPS.
+      // request.ip is trustworthy because fastify is configured with
+      // trustProxy:true and Caddy sets X-Forwarded-For.
+      if (!isIpAllowed(request.ip, ctx.allowedIps)) {
+        request.log.warn(
+          { merchantId, ip: request.ip },
+          'merchant session rejected: caller IP not on allowlist',
+        );
         return reply.code(401).send({ error: 'unauthorized' });
       }
 

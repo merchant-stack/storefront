@@ -2,6 +2,7 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
+import { parseIpAllowlist } from './services/ip-allowlist.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(here, '../../../.env.local') });
@@ -103,6 +104,13 @@ const schema = z.object({
   // somehow gets a session created can't fish buyers off to evil.com.
   // Example: "cobalt.skin,www.cobalt.skin".
   MERCHANT_COBALT_ALLOWED_RETURN_DOMAINS: z.string().default(''),
+  // Comma-separated allowlist of IPs / CIDRs the merchant's server is allowed
+  // to call /api/merchant/sessions from. Defence-in-depth on top of HMAC —
+  // even a leaked secret can't be used from arbitrary attacker IPs.
+  // Supported entries: "1.2.3.4", "1.2.3.0/24", "2001:db8::1" (IPv6 exact).
+  // EMPTY string = allowlist disabled (HMAC alone protects). Used for the
+  // initial integration window before the merchant's egress IPs are known.
+  MERCHANT_COBALT_ALLOWED_IPS: z.string().default(''),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -122,6 +130,13 @@ const merchantCobaltAllowedReturnDomains = new Set(
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
 );
+
+const merchantCobaltAllowedIps = parseIpAllowlist(parsed.data.MERCHANT_COBALT_ALLOWED_IPS);
+if (merchantCobaltAllowedIps.rejected.length > 0) {
+  console.warn(
+    `MERCHANT_COBALT_ALLOWED_IPS: ignoring unparseable entries: ${merchantCobaltAllowedIps.rejected.join(', ')}`,
+  );
+}
 
 const mockPaymentsAllowedSteamIds = new Set(
   parsed.data.MOCK_PAYMENTS_ALLOWED_STEAM_IDS
@@ -149,4 +164,6 @@ export const env = {
   MOCK_PAYMENTS_ALLOWED_STEAM_IDS_SET: mockPaymentsAllowedSteamIds,
   /** Pre-parsed lowercased allowlist of return-URL host names for cobalt.skin merchant. */
   MERCHANT_COBALT_ALLOWED_RETURN_DOMAINS_SET: merchantCobaltAllowedReturnDomains,
+  /** Pre-parsed IP allowlist for cobalt.skin merchant. Empty array = disabled. */
+  MERCHANT_COBALT_ALLOWED_IPS_ENTRIES: merchantCobaltAllowedIps.entries,
 };

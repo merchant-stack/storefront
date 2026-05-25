@@ -10,6 +10,7 @@
 import { prisma } from '@rustskinpay/db';
 import type { Merchant } from '@rustskinpay/db';
 import { env } from '../env.js';
+import type { IpAllowEntry } from './ip-allowlist.js';
 
 export interface MerchantContext {
   merchant: Merchant;
@@ -17,6 +18,12 @@ export interface MerchantContext {
   apiSecret: string;
   /** Domains we accept in inbound return_url params (open-redirect defence). */
   allowedReturnDomains: Set<string>;
+  /**
+   * IP allowlist for inbound calls. Empty = disabled (HMAC alone protects).
+   * Non-empty = caller IP must be present, or request is rejected with
+   * generic 401 before signature verification runs.
+   */
+  allowedIps: IpAllowEntry[];
 }
 
 const COBALT_MERCHANT_ID = 'm_cobalt_skin';
@@ -48,5 +55,6 @@ export async function resolveMerchantContext(
     merchant,
     apiSecret: env.MERCHANT_COBALT_API_SECRET,
     allowedReturnDomains: env.MERCHANT_COBALT_ALLOWED_RETURN_DOMAINS_SET,
+    allowedIps: env.MERCHANT_COBALT_ALLOWED_IPS_ENTRIES,
   };
 }
