@@ -17,7 +17,7 @@ interface Props {
 
 export const PayEmbed = ({ planId, returnUrl }: Props) => {
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-zinc-950/60 p-1">
+    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-zinc-950/70">
       <WhopCheckoutEmbed
         planId={planId}
         theme="dark"

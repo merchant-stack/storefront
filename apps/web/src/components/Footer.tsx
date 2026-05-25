@@ -1,7 +1,18 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { LEGAL_ENTITY_ONE_LINE, SUPPORT_EMAIL, SUPPORT_MAILTO } from '@/lib/support';
 
 export const Footer = () => {
+  const pathname = usePathname();
+  // Checkout / merchant-pay routes intentionally render no global footer —
+  // see CheckoutShell.tsx. Bailing early keeps the form column the only
+  // thing the buyer sees below the brand mark.
+  if (pathname.startsWith('/checkout/') || pathname.startsWith('/pay/')) {
+    return null;
+  }
+
   return (
     <footer className="mt-24 border-t border-white/[0.06] bg-zinc-950/50">
       <div className="mx-auto max-w-7xl px-6 py-12">

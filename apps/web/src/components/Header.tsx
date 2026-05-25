@@ -54,6 +54,13 @@ export const Header = () => {
     router.push(q ? `/market?q=${encodeURIComponent(q)}` : '/market');
   };
 
+  // Checkout / merchant-pay routes use a stripped page chrome (logo + form
+  // only, no nav). Bail out before rendering so they don't get the global
+  // header at all.
+  if (pathname.startsWith('/checkout/') || pathname.startsWith('/pay/')) {
+    return null;
+  }
+
   const navLink = (href: string, label: string) => {
     const active = href === '/market' ? pathname.startsWith('/market') : pathname === href;
     return (

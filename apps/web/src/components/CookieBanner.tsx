@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const STORAGE_KEY = 'rsp-cookie-consent';
 
 export const CookieBanner = () => {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -15,6 +17,12 @@ export const CookieBanner = () => {
       // localStorage may be unavailable (private mode); just don't show banner.
     }
   }, []);
+
+  // Suppress on checkout / merchant-pay routes — those pages strip all
+  // non-form chrome (matches Stripe/skinramp pattern).
+  if (pathname.startsWith('/checkout/') || pathname.startsWith('/pay/')) {
+    return null;
+  }
 
   const accept = () => {
     try {
