@@ -91,6 +91,12 @@ export const registerCheckoutRoutes = (server: FastifyInstance): void => {
       if (item.salePriceMinor > env.MAX_BUY_PRICE_MINOR) {
         return { error: 'item_temporarily_unavailable' as const };
       }
+      // PSP floor: Whop refuses plans below $1.00 with a 400. Block here
+      // (same UX as the cap above) so the buyer doesn't hit a 503 deep in
+      // the checkout flow.
+      if (item.salePriceMinor < env.MIN_BUY_PRICE_MINOR) {
+        return { error: 'item_temporarily_unavailable' as const };
+      }
       // Staleness guard: a stale snapshot is likely sold or repriced. Better
       // to ask the buyer to refresh than to send them to Stripe for something
       // we'll have to refund post-charge.

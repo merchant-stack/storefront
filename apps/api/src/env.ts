@@ -77,6 +77,11 @@ const schema = z.object({
   // shown on the storefront but can't be purchased yet — we display a
   // "restocking" message. Raise (in cents) as bot balance + ops confidence grows.
   MAX_BUY_PRICE_MINOR: z.coerce.number().int().positive().default(500),
+  // PSP minimum. Whop refuses plan creation under $1.00 (returns 400 "plan
+  // must be at least $1.00") — items below this floor would 503 the buyer
+  // at checkout with no recourse. Mark them restocking on the storefront
+  // (UX: same as above-cap) instead. 100 cents = $1.00.
+  MIN_BUY_PRICE_MINOR: z.coerce.number().int().nonnegative().default(100),
   // Reject checkout if the SourceItem snapshot is older than this. Prevents
   // charging the buyer for a listing that's gone stale between sync cycles.
   // The post-payment refund flow still catches actual buy failures, but this

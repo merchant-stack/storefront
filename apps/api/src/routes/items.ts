@@ -151,8 +151,9 @@ export const registerItemRoutes = (server: FastifyInstance): void => {
 /**
  * Storefront card status the web uses to pick the right badge / CTA. Hides
  * the underlying provider from the wire.
- *   - in_stock: real bot inventory, within the buy-price cap → "Buy" CTA
- *   - restocking: real bot inventory but above MAX_BUY_PRICE_MINOR → "Restocking"
+ *   - in_stock: real bot inventory, inside [MIN_BUY_PRICE_MINOR, MAX_BUY_PRICE_MINOR] → "Buy" CTA
+ *   - restocking: real bot inventory, OUTSIDE that range (too cheap for the
+ *     PSP minimum, or above our fulfilment cap) → "Restocking" badge
  *   - coming_soon: SHOWCASE placeholder, never buyable → "Coming soon" badge
  */
 function computeStatus(
@@ -161,5 +162,6 @@ function computeStatus(
 ): 'in_stock' | 'restocking' | 'coming_soon' {
   if (provider === 'SHOWCASE') return 'coming_soon';
   if (salePriceMinor > env.MAX_BUY_PRICE_MINOR) return 'restocking';
+  if (salePriceMinor < env.MIN_BUY_PRICE_MINOR) return 'restocking';
   return 'in_stock';
 }
