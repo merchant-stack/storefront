@@ -3,15 +3,21 @@
 // URL: /pay/<orderId>. The orderId arrives in the URL as a long cuid; we
 // treat it as the bearer token (same pattern as Stripe checkout sessions).
 //
-// Visual: same CheckoutShell as the main-site /checkout/[id] page — logo +
-// "Checkout" headline + subtitle + iframe. Only the subtitle and the
-// summary card differ (merchant + amount instead of item icon + name).
+// White-label by design: the buyer should not see WHO is processing the
+// payment behind the scenes. No rustsupply logo, no merchant name on
+// screen — just "Checkout", the amount, and the Whop iframe. The merchant
+// name lives only in server-side context (webhook delivery, refund routing).
 
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { API_URL } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
 import { CheckoutShell } from '@/components/CheckoutShell';
 import { PayEmbed } from '@/components/PayEmbed';
+
+// Override the global title template so the browser tab doesn't read
+// "Something — RustSupply" on a page that's supposed to feel brandless.
+export const metadata: Metadata = { title: { absolute: 'Checkout' } };
 
 interface PaySession {
   session_id: string;
@@ -47,30 +53,17 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
 
   const summary = (
     <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-4">
-      <div className="min-w-0">
-        <div className="label">Deposit to</div>
-        <div className="mt-0.5 truncate font-display text-lg font-bold tracking-tight text-white">
-          {session.merchant_name}
-        </div>
-      </div>
-      <div className="text-right">
-        <div className="label">Amount</div>
-        <div className="font-display text-2xl font-bold tabular-nums text-white">
-          {amountLabel}
-        </div>
+      <div className="text-sm text-zinc-400">Amount due</div>
+      <div className="font-display text-2xl font-bold tabular-nums text-white">
+        {amountLabel}
       </div>
     </div>
   );
 
   return (
     <CheckoutShell
-      subtitle={
-        <>
-          Funds will be credited to your{' '}
-          <span className="font-medium text-zinc-200">{session.merchant_name}</span> balance once
-          payment clears.
-        </>
-      }
+      showBrand={false}
+      subtitle="Complete the payment below to credit your account balance."
     >
       {isPaid ? (
         <div className="space-y-5">
@@ -88,8 +81,8 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
           <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] px-4 py-3.5 text-sm text-red-300">
             <p className="font-medium">Unexpected state</p>
             <p className="mt-1 text-[13px] opacity-90">
-              This payment session is in an unexpected state. Please return to{' '}
-              {session.merchant_name} and start a new deposit.
+              This payment session is in an unexpected state. Please go back and start a new
+              deposit.
             </p>
           </div>
         </div>
@@ -98,7 +91,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
           {summary}
           <PayEmbed planId={session.plan_id} returnUrl={session.return_url ?? '/'} />
           <p className="text-center text-[11px] text-zinc-500">
-            Secure payment by Whop · Card details never touch our servers.
+            Secure payment · Card details never touch our servers.
           </p>
         </div>
       )}
@@ -117,12 +110,12 @@ function PaidNotice({ returnUrl }: { returnUrl: string | null }) {
       <div>
         <h2 className="font-display text-xl font-bold text-emerald-100">Payment received</h2>
         <p className="mt-1 text-sm text-emerald-200/80">
-          Your deposit is on its way to your balance.
+          Your deposit is being credited to your balance.
         </p>
       </div>
       {returnUrl ? (
         <a href={returnUrl} className="btn-primary mt-2 w-full py-3 text-sm">
-          Return to merchant →
+          Continue →
         </a>
       ) : null}
     </div>
@@ -141,7 +134,7 @@ function FailedNotice({ status, cancelUrl }: { status: string; cancelUrl: string
       <h2 className="font-display text-lg font-bold text-red-100">{message}</h2>
       {cancelUrl ? (
         <a href={cancelUrl} className="btn-secondary mx-auto w-full max-w-xs py-2.5 text-sm">
-          Back to merchant
+          Go back
         </a>
       ) : null}
     </div>
