@@ -52,9 +52,9 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
     session.status === 'FULFILLED';
 
   const summary = (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-4">
-      <div className="text-sm text-zinc-400">Amount due</div>
-      <div className="font-display text-2xl font-bold tabular-nums text-white">
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4 shadow-sm">
+      <div className="text-sm text-zinc-500">Amount due</div>
+      <div className="font-display text-2xl font-bold tabular-nums text-zinc-950">
         {amountLabel}
       </div>
     </div>
@@ -78,7 +78,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
       ) : !session.plan_id ? (
         <div className="space-y-5">
           {summary}
-          <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] px-4 py-3.5 text-sm text-red-300">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-800">
             <p className="font-medium">Unexpected state</p>
             <p className="mt-1 text-[13px] opacity-90">
               This payment session is in an unexpected state. Please go back and start a new
@@ -90,9 +90,6 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
         <div className="space-y-5">
           {summary}
           <PayEmbed planId={session.plan_id} returnUrl={session.return_url ?? '/'} />
-          <p className="text-center text-[11px] text-zinc-500">
-            Secure payment · Card details never touch our servers.
-          </p>
         </div>
       )}
     </CheckoutShell>
@@ -101,20 +98,23 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
 
 function PaidNotice({ returnUrl }: { returnUrl: string | null }) {
   return (
-    <div className="flex flex-col items-center gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-6 text-center">
-      <div className="grid h-12 w-12 place-items-center rounded-full bg-emerald-500/15 text-emerald-300">
+    <div className="flex flex-col items-center gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm">
+      <div className="grid h-12 w-12 place-items-center rounded-full bg-emerald-100 text-emerald-700">
         <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
         </svg>
       </div>
       <div>
-        <h2 className="font-display text-xl font-bold text-emerald-100">Payment received</h2>
-        <p className="mt-1 text-sm text-emerald-200/80">
+        <h2 className="font-display text-xl font-bold text-emerald-900">Payment received</h2>
+        <p className="mt-1 text-sm text-emerald-800/80">
           Your deposit is being credited to your balance.
         </p>
       </div>
       {returnUrl ? (
-        <a href={returnUrl} className="btn-primary mt-2 w-full py-3 text-sm">
+        <a
+          href={returnUrl}
+          className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800"
+        >
           Continue →
         </a>
       ) : null}
@@ -130,10 +130,13 @@ function FailedNotice({ status, cancelUrl }: { status: string; cancelUrl: string
         ? 'This payment was refunded.'
         : 'This payment did not complete.';
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-red-500/20 bg-red-500/[0.04] p-5 text-center">
-      <h2 className="font-display text-lg font-bold text-red-100">{message}</h2>
+    <div className="flex flex-col gap-4 rounded-xl border border-red-200 bg-red-50 p-5 text-center shadow-sm">
+      <h2 className="font-display text-lg font-bold text-red-900">{message}</h2>
       {cancelUrl ? (
-        <a href={cancelUrl} className="btn-secondary mx-auto w-full max-w-xs py-2.5 text-sm">
+        <a
+          href={cancelUrl}
+          className="mx-auto inline-flex w-full max-w-xs items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+        >
           Go back
         </a>
       ) : null}

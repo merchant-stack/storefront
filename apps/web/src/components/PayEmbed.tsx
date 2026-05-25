@@ -17,17 +17,15 @@ interface Props {
 
 export const PayEmbed = ({ planId, returnUrl }: Props) => {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white">
+    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
       <WhopCheckoutEmbed
         planId={planId}
-        // Light theme is a deliberate trade-off: Whop's dark-theme iframe has
-        // a CSS bug where the country dropdown popup renders gray-on-white
-        // (unreadable). Light theme makes the popup natively readable. The
-        // visual mismatch with the surrounding dark page is acceptable
-        // because the buyer's focus is on the form at this step. Revert when
-        // Whop ships a dropdown contrast fix.
+        // Light theme deliberately: matches the surrounding light page chrome
+        // (see CheckoutShell.tsx) and dodges Whop's dark-theme dropdown bug
+        // where the country popover renders gray-on-white. Revert to dark
+        // once Whop fixes their popover contrast.
         theme="light"
-        styles={{ container: { paddingX: 0, paddingY: 16 } }}
+        styles={{ container: { paddingX: 16, paddingY: 24 } }}
         onComplete={(_planId, _receiptId) => {
           // Merchant's webhook is what actually credits the user. This
           // redirect is just for the buyer's UX — their browser lands back

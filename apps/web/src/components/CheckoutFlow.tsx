@@ -173,22 +173,19 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
     return (
       <div className="space-y-5">
         {summary}
-        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
           <WhopCheckoutEmbed
             planId={session.planId}
             // See PayEmbed.tsx for why light theme — Whop's dark-theme
             // country dropdown renders gray-on-white. Match here so both
             // checkout flows have the same form contrast.
             theme="light"
-            styles={{ container: { paddingX: 0, paddingY: 16 } }}
+            styles={{ container: { paddingX: 16, paddingY: 24 } }}
             onComplete={(_planId, _receiptId) => {
               router.push(`/order/${session.orderId}`);
             }}
           />
         </div>
-        <p className="text-center text-[11px] text-zinc-500">
-          Secure payment by Whop · Card details never touch our servers.
-        </p>
       </div>
     );
   }
@@ -200,7 +197,7 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
         <Notice tone="amber" title="Price just updated">
           <p>
             Latest price:{' '}
-            <span className="font-mono font-semibold text-amber-100">
+            <span className="font-mono font-semibold text-amber-950">
               {formatPrice(error.lastKnownPrice, error.lastKnownCurrency)}
             </span>
             . Continue at the new price?
@@ -225,7 +222,7 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
           <p>We need it to deliver the skin to your account.</p>
           <Link
             href="/account"
-            className="mt-2 inline-flex text-sm font-medium text-amber-100 underline underline-offset-2 hover:text-white"
+            className="mt-2 inline-flex text-sm font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
           >
             Go to account →
           </Link>
@@ -241,7 +238,7 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
           <p>Sign in with Steam to complete your purchase.</p>
           <Link
             href="/account"
-            className="mt-2 inline-flex text-sm font-medium text-sky-100 underline underline-offset-2 hover:text-white"
+            className="mt-2 inline-flex text-sm font-medium text-sky-900 underline underline-offset-2 hover:text-sky-950"
           >
             Sign in →
           </Link>
@@ -266,38 +263,35 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
   return (
     <div className="space-y-5">
       {summary}
-      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-zinc-950/70">
-        <div className="flex h-[520px] flex-col items-center justify-center gap-3 text-zinc-500">
+      <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="flex h-[520px] flex-col items-center justify-center gap-3 text-zinc-400">
           <Spinner />
           <p className="text-sm">Preparing secure checkout…</p>
         </div>
       </div>
-      <p className="text-center text-[11px] text-zinc-500">
-        Secure payment by Whop · Card details never touch our servers.
-      </p>
     </div>
   );
 };
 
 const ItemSummary = ({ item }: { item: ItemDTO }) => (
-  <div className="flex items-center gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+  <div className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
     {item.iconUrl ? (
       <img
         src={item.iconUrl}
         alt=""
-        className="h-14 w-14 shrink-0 rounded-lg bg-zinc-950/60 object-contain p-1.5"
+        className="h-14 w-14 shrink-0 rounded-lg bg-zinc-50 object-contain p-1.5"
       />
     ) : (
-      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-zinc-900 font-display text-lg font-bold text-zinc-500">
+      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-zinc-100 font-display text-lg font-bold text-zinc-500">
         {item.displayName.slice(0, 1).toUpperCase()}
       </div>
     )}
     <div className="min-w-0 flex-1">
-      <div className="truncate text-sm font-semibold text-white">{item.displayName}</div>
+      <div className="truncate text-sm font-semibold text-zinc-900">{item.displayName}</div>
       <div className="mt-0.5 truncate text-xs text-zinc-500">{item.type ?? 'Rust skin'}</div>
     </div>
     <div className="text-right">
-      <div className="font-display text-xl font-bold tabular-nums text-white">
+      <div className="font-display text-xl font-bold tabular-nums text-zinc-950">
         {formatPrice(item.salePriceMinor, item.currency)}
       </div>
     </div>
@@ -306,10 +300,10 @@ const ItemSummary = ({ item }: { item: ItemDTO }) => (
 
 type Tone = 'amber' | 'sky' | 'red' | 'zinc';
 const TONE_CLASSES: Record<Tone, string> = {
-  amber: 'border-amber-500/30 bg-amber-500/[0.06] text-amber-200',
-  sky: 'border-sky-500/20 bg-sky-500/[0.04] text-sky-200',
-  red: 'border-red-500/20 bg-red-500/[0.04] text-red-300',
-  zinc: 'border-white/[0.08] bg-white/[0.02] text-zinc-300',
+  amber: 'border-amber-300 bg-amber-50 text-amber-900',
+  sky: 'border-sky-300 bg-sky-50 text-sky-900',
+  red: 'border-red-300 bg-red-50 text-red-900',
+  zinc: 'border-zinc-200 bg-zinc-50 text-zinc-700',
 };
 const Notice = ({
   tone,
@@ -320,7 +314,7 @@ const Notice = ({
   title: string;
   children: React.ReactNode;
 }) => (
-  <div className={`rounded-xl border px-4 py-3.5 text-sm ${TONE_CLASSES[tone]}`}>
+  <div className={`rounded-xl border px-4 py-3.5 text-sm shadow-sm ${TONE_CLASSES[tone]}`}>
     <p className="font-medium">{title}</p>
     <div className="mt-1 text-[13px] opacity-90">{children}</div>
   </div>
@@ -328,7 +322,7 @@ const Notice = ({
 
 const Spinner = () => (
   <svg viewBox="0 0 24 24" className="h-6 w-6 animate-spin" fill="none">
-    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity={0.25} strokeWidth={2.5} />
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity={0.2} strokeWidth={2.5} />
     <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" />
   </svg>
 );

@@ -15,14 +15,15 @@ interface Props {
   showBrand?: boolean;
 }
 
-// Minimal page chrome for /checkout/[id] and /pay/[id]. Mirrors the layout
-// pattern most modern card-payment flows use (Stripe, Shopify, skinramp):
-// strip all marketing nav, leave just a small brand mark + the form. Pages
-// that mount this opt out of the global Header/Footer via pathname checks
-// in those components.
+// Minimal page chrome for /checkout/[id] and /pay/[id]. Light-themed by
+// intent: industry-standard payment flows (Stripe Checkout, Shopify, Apple
+// Pay) are light regardless of the source site's theme — buyers read it as
+// "focused secure step." Also dodges a Whop dark-theme bug where the
+// country dropdown popup renders gray-on-white inside their iframe. Global
+// Header/Footer are suppressed on these routes via pathname checks.
 export const CheckoutShell = ({ subtitle, children, showBrand = true }: Props) => {
   return (
-    <main className="min-h-screen bg-zinc-950">
+    <main className="min-h-screen bg-gradient-to-b from-zinc-50 to-zinc-100">
       <div className="mx-auto max-w-2xl px-6 pb-24 pt-10 sm:pt-14">
         {showBrand ? (
           <Link
@@ -30,7 +31,7 @@ export const CheckoutShell = ({ subtitle, children, showBrand = true }: Props) =
             aria-label="RustSupply home"
             className="group inline-flex items-center"
           >
-            <span className="font-display text-xl font-bold tracking-tight text-zinc-50">
+            <span className="font-display text-xl font-bold tracking-tight text-zinc-900">
               rust
               <span className="bg-gradient-to-r from-brand-400 via-brand to-brand-600 bg-clip-text text-transparent">
                 supply
@@ -41,15 +42,22 @@ export const CheckoutShell = ({ subtitle, children, showBrand = true }: Props) =
         ) : null}
 
         <h1
-          className={`font-display text-4xl font-bold tracking-tight text-white sm:text-[44px] ${
+          className={`font-display text-4xl font-bold tracking-tight text-zinc-950 sm:text-[44px] ${
             showBrand ? 'mt-14' : 'mt-4 sm:mt-8'
           }`}
         >
           Checkout
         </h1>
-        <p className="mt-2 text-sm text-zinc-400 sm:text-base">{subtitle}</p>
+        <p className="mt-2 text-sm text-zinc-500 sm:text-base">{subtitle}</p>
 
         <div className="mt-8">{children}</div>
+
+        <div className="mt-10 flex items-center justify-center gap-2 text-xs text-zinc-400">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 12.75v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+          Secured by Whop · 256-bit TLS · PCI-DSS Level 1
+        </div>
       </div>
     </main>
   );
