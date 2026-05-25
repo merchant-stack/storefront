@@ -37,6 +37,11 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
   // Strict-mode guard: useEffect runs twice in dev. We never want to double-
   // POST /api/checkout (would burn two Whop Plans + two orphan orders).
   const startedRef = useRef(false);
+  // Count stale-listing retries so we don't lock the buyer in an infinite
+  // "Continue at the new price" dialog when the server keeps rejecting
+  // (typically: the item's price oracle entry temporarily disappeared and
+  // its lastSyncedAt won't refresh until the worker's next successful tick).
+  const staleRetriesRef = useRef(0);
 
   const summary = <ItemSummary item={item} />;
 
@@ -73,6 +78,19 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
             setError({
               kind: 'text',
               message: 'This skin just sold out. Browse the market for similar items.',
+            });
+            return;
+          }
+          staleRetriesRef.current += 1;
+          // After 2 consecutive stale rejections, stop offering the
+          // "continue at new price" loop — the server isn't going to flip
+          // on this tick. Surface a friendlier "try again in a moment"
+          // and let the buyer refresh on their own.
+          if (staleRetriesRef.current >= 2) {
+            setError({
+              kind: 'text',
+              message:
+                "This item's price hasn't refreshed yet on our side — try again in a minute or pick a different skin.",
             });
             return;
           }

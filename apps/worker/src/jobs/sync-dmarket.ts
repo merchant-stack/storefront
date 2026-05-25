@@ -131,6 +131,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
   // 3. Upsert each inventory item with its computed retail price.
   const seenAssetIds = new Set<string>();
   let skippedNoPrice = 0;
+  let skippedNoPriceRetained = 0;
   let upserted = 0;
   for (const item of inventory) {
     const assetId = String(item.assetid);
@@ -139,7 +140,28 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
 
     const sourcePriceMinor = priceIndex.bestFor(item.market_hash_name);
     if (sourcePriceMinor === null) {
-      skippedNoPrice += 1;
+      // Public oracle has no current price for this hash_name (rare item,
+      // transient listing gap on rust.tm, etc.). If we have a prior valid
+      // price in DB, refresh ONLY lastSyncedAt so the api's staleness guard
+      // (MAX_LISTING_AGE_SECONDS) doesn't permanently lock buyers out of
+      // this item — the bot still physically has it, our markup still
+      // applies, and the worst case is a slightly outdated price (already
+      // buffered by the 10% markup). If we never had a price, leave it
+      // alone so the item stays untradable rather than entering the
+      // catalogue at $0.
+      const refreshed = await prisma.sourceItem.updateMany({
+        where: {
+          provider: 'OWN_INVENTORY',
+          sourceOfferId: assetId,
+          salePriceMinor: { gt: 0 },
+        },
+        data: { lastSyncedAt: new Date() },
+      });
+      if (refreshed.count > 0) {
+        skippedNoPriceRetained += 1;
+      } else {
+        skippedNoPrice += 1;
+      }
       continue;
     }
     const salePriceMinor = applyMarkup(sourcePriceMinor, markupBps);
@@ -234,6 +256,7 @@ export async function syncDMarket(job: Job<SyncDMarketJob>): Promise<{
       fetched: inventory.length,
       upserted,
       skippedNoPrice,
+      skippedNoPriceRetained,
       retired: retired.count,
       retiredLegacy: retiredLegacy.count,
       showcaseUpserted: showcaseResult.upserted,
