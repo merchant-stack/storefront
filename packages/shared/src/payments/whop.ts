@@ -104,13 +104,6 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
         // Don't surface this plan on the public Whop product page — it exists
         // only as a one-shot purchase token for the current buyer.
         visibility: 'hidden' as const,
-        // Tax handling: 'unspecified' is the API enum for "not tax-configured"
-        // — observed in competitor checkouts (skinramp etc.) to suppress the
-        // "Estimated tax due today" line for EU buyers. Default behaviour
-        // (omitting tax_type) is 'exclusive' = adds tax on top, which sticker-
-        // shocks EU buyers. The company-level `collect_tax` setting may still
-        // override; if so, escalate to Whop support for a company-level flip.
-        tax_type: 'unspecified' as const,
       };
 
       const res = await fetch(`${baseUrl}/api/v1/plans`, {
