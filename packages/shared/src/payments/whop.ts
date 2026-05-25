@@ -116,6 +116,26 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
         body: JSON.stringify(body),
       });
       if (!res.ok) {
+        // Capture Whop's error body so the upstream `payment_provider_unavailable`
+        // 503 is debuggable from server logs — without this we just see "null"
+        // and the buyer-facing message, with no idea WHY Whop refused (disabled
+        // payment method, plan limit, currency unsupported, etc.). console.error
+        // (rather than a passed-in logger) keeps the provider package signature
+        // unchanged; the api's pino + docker logs capture stderr lines fine.
+        const errBody = await res.text().catch(() => '<unreadable>');
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            provider: 'whop',
+            endpoint: '/api/v1/plans',
+            status: res.status,
+            // Cap body at 500 chars — Whop errors are usually short JSON, this
+            // prevents accidentally flooding logs if they ever return HTML.
+            body: errBody.slice(0, 500),
+            orderId: input.orderId,
+            msg: 'whop plan creation failed',
+          }),
+        );
         return null;
       }
       const plan = (await res.json()) as WhopPlanResponse;
