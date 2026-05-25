@@ -173,10 +173,13 @@ export const CheckoutFlow = ({ item, buyable }: Props) => {
     return (
       <div className="space-y-5">
         {summary}
-        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-zinc-950/70">
+        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white">
           <WhopCheckoutEmbed
             planId={session.planId}
-            theme="dark"
+            // See PayEmbed.tsx for why light theme — Whop's dark-theme
+            // country dropdown renders gray-on-white. Match here so both
+            // checkout flows have the same form contrast.
+            theme="light"
             styles={{ container: { paddingX: 0, paddingY: 16 } }}
             onComplete={(_planId, _receiptId) => {
               router.push(`/order/${session.orderId}`);
