@@ -30,7 +30,18 @@ www.rustsupply.com {
 
 rustsupply.com {
 	encode zstd gzip
-	reverse_proxy web:3000
+
+	# Apple Pay domain verification (Whop self-hosted flow).
+	# Whop issued this hex blob; Apple fetches it via Whop to verify domain ownership.
+	@apple_pay path /.well-known/apple-developer-merchantid-domain-association
+	handle @apple_pay {
+		header Content-Type "text/plain"
+		respond "7b2276657273696f6e223a312c227073704964223a2236343641384242363234393134464232453835354239443531364642353530333338314132444446383545414643463630323336443830413044434235334632222c22637265617465644f6e223a313736303636343737373433327d" 200
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
