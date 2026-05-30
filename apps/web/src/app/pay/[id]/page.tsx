@@ -14,6 +14,7 @@ import { API_URL } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
 import { CheckoutShell } from '@/components/CheckoutShell';
 import { PayEmbed } from '@/components/PayEmbed';
+import { SkinPreview } from '@/components/SkinPreview';
 
 // Override the global title template so the browser tab doesn't read
 // "Something — RustSupply" on a page that's supposed to feel brandless.
@@ -29,6 +30,7 @@ interface PaySession {
   return_url: string | null;
   cancel_url: string | null;
   paid_at: string | null;
+  cover_skin: { name: string; icon_url: string | null } | null;
 }
 
 async function fetchSession(id: string): Promise<PaySession | null> {
@@ -89,6 +91,13 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
       ) : (
         <div className="space-y-5">
           {summary}
+          {session.cover_skin ? (
+            <SkinPreview
+              name={session.cover_skin.name}
+              iconUrl={session.cover_skin.icon_url}
+              priceLabel={amountLabel}
+            />
+          ) : null}
           <PayEmbed planId={session.plan_id} returnUrl={session.return_url ?? '/'} />
         </div>
       )}

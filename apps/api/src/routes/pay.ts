@@ -46,6 +46,13 @@ export const registerPayRoutes = (server: FastifyInstance): void => {
     const returnUrl = typeof meta.returnUrl === 'string' ? meta.returnUrl : null;
     const cancelUrl = typeof meta.cancelUrl === 'string' ? meta.cancelUrl : null;
 
+    // Cover skin: the real Rust skin name (+ icon) we picked at session create.
+    // The /pay page renders it as the item being "purchased" — priced at the
+    // deposit amount, not the skin's own reference price. iconUrl may be null
+    // (Steam lookup failed at create) → the page shows a generated placeholder.
+    const coverSkinName = typeof meta.coverSku === 'string' ? meta.coverSku : null;
+    const coverSkinIconUrl = typeof meta.coverSkuIconUrl === 'string' ? meta.coverSkuIconUrl : null;
+
     // Only expose the Whop plan id when the order is still PENDING — once
     // PAID/FAILED there's nothing to render an iframe for, and exposing
     // planId after the fact gives no value while marginally increasing
@@ -63,6 +70,9 @@ export const registerPayRoutes = (server: FastifyInstance): void => {
       return_url: returnUrl,
       cancel_url: cancelUrl,
       paid_at: order.paidAt ? order.paidAt.toISOString() : null,
+      cover_skin: coverSkinName
+        ? { name: coverSkinName, icon_url: coverSkinIconUrl }
+        : null,
     });
   });
 };

@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { prisma } from '@rustskinpay/db';
 import { verifyRequestSignature } from '@rustskinpay/shared/merchant-hmac';
 import { pickCoverSku } from '@rustskinpay/shared/cover-sku';
+import { resolveSteamMarketIcon } from '@rustskinpay/shared/steam-icon';
 import { resolveMerchantContext } from '../services/merchant.js';
 import { getMarketPriceIndex } from '../services/market-prices-cache.js';
 import { createPaymentSession } from '../services/payments.js';
@@ -220,6 +221,16 @@ export const registerMerchantSessionRoutes = (server: FastifyInstance): void => 
         return reply.code(503).send({ error: 'price_oracle_empty' });
       }
 
+      // Best-effort: resolve a real Steam icon for the cover skin so the /pay
+      // page can render the actual item image ("the skin you're buying").
+      // Done ONCE here (not per page load) and cached in metadata. Tight
+      // timeout + fully non-fatal: on any failure the page falls back to the
+      // generated placeholder. Runs on the merchant's server-to-server call,
+      // before their user is redirected — a sub-second typical cost.
+      const coverSkuIconUrl = await resolveSteamMarketIcon(coverSku.marketHashName, {
+        timeoutMs: 3000,
+      }).catch(() => null);
+
       // Create the Order (in a transaction with a unique-violation guard so
       // a parallel request with the same merchant_order_id can't double-create).
       let orderId: string;
@@ -246,6 +257,7 @@ export const registerMerchantSessionRoutes = (server: FastifyInstance): void => 
               userIdentifier: body.user_identifier ?? null,
               coverSku: coverSku.marketHashName,
               coverSkuReferencePriceMinor: coverSku.referencePriceMinor,
+              coverSkuIconUrl,
               merchantMetadata: (body.metadata ?? null) as never,
             } as object,
           },
