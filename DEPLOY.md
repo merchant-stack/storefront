@@ -197,24 +197,24 @@ If something fails, check:
 
 ### 7.1 API (`api.env` on the VPS)
 
-| Variable                  | Required | Example                                                       | Notes                                                                                |
-| ------------------------- | -------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `NODE_ENV`                | yes      | `production`                                                  |                                                                                      |
-| `PORT`                    | yes      | `4000`                                                        | Must match the port Caddy reverse-proxies to (`api:4000`) and the Dockerfile EXPOSE. |
-| `DATABASE_URL`            | yes      | `postgresql://postgres:...@pooler.supabase.com:6543/postgres` | Pooler URL, not direct                                                               |
-| `REDIS_URL`               | yes      | `rediss://default:...@xxx.upstash.io:6379`                    |                                                                                      |
-| `WEB_ORIGIN`              | yes      | `https://rustskinpay.com`                                     |                                                                                      |
-| `API_ORIGIN`              | yes      | `https://api.rustskinpay.com`                                 | Public URL of this service. Used for OpenID return-to.                               |
-| `CORS_EXTRA_ORIGINS`      | optional | `https://www.rustskinpay.com`                                 | Comma-separated.                                                                     |
-| `COOKIE_SECRET`           | yes      | (32+ random chars)                                            | Generate with the node one-liner in §2.3                                             |
-| `SESSION_SAMESITE`        | yes      | `lax`                                                         | `lax` for web+api on same registrable domain; `none` if they diverge                 |
-| `CHECKOUT_DISABLED`       | yes      | `true`                                                        | Flip to `false` only after payment provider wired                                    |
-| `MOCK_PAYMENTS`           | yes      | `false`                                                       | Never `true` in prod                                                                 |
-| `STEAM_API_KEY`           | optional |                                                               | Improves Steam profile fetch                                                         |
-| `MAX_BUY_PRICE_MINOR`     | optional | `500` (= $5)                                                  | Soft cap                                                                             |
-| `MAX_LISTING_AGE_SECONDS` | optional | `600`                                                         |                                                                                      |
-| `STRIPE_SECRET_KEY`       | optional |                                                               | Wire at payment launch                                                               |
-| `STRIPE_WEBHOOK_SECRET`   | optional |                                                               | Wire at payment launch                                                               |
+| Variable                  | Required | Example                                                       | Notes                                                                                     |
+| ------------------------- | -------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `NODE_ENV`                | yes      | `production`                                                  |                                                                                           |
+| `PORT`                    | yes      | `4000`                                                        | Must match the port Caddy reverse-proxies to (`api:4000`) and the Dockerfile EXPOSE.      |
+| `DATABASE_URL`            | yes      | `postgresql://postgres:...@pooler.supabase.com:6543/postgres` | Pooler URL, not direct                                                                    |
+| `REDIS_URL`               | yes      | `rediss://default:...@xxx.upstash.io:6379`                    |                                                                                           |
+| `WEB_ORIGIN`              | yes      | `https://rustskinpay.com`                                     |                                                                                           |
+| `API_ORIGIN`              | yes      | `https://api.rustskinpay.com`                                 | Public URL of this service. Used for OpenID return-to.                                    |
+| `CORS_EXTRA_ORIGINS`      | optional | `https://www.rustskinpay.com`                                 | Comma-separated.                                                                          |
+| `COOKIE_SECRET`           | yes      | (32+ random chars)                                            | Generate with the node one-liner in §2.3                                                  |
+| `SESSION_SAMESITE`        | yes      | `lax`                                                         | `lax` for web+api on same registrable domain; `none` if they diverge                      |
+| `CHECKOUT_DISABLED`       | yes      | `true`                                                        | Flip to `false` only after payment provider wired                                         |
+| `MOCK_PAYMENTS`           | yes      | `false`                                                       | Never `true` in prod                                                                      |
+| `STEAM_API_KEY`           | optional |                                                               | Improves Steam profile fetch                                                              |
+| `MAX_BUY_PRICE_MINOR`     | optional | `2000` (= $20)                                                | Soft cap on buyable item price; also bounds per-order loss while refund kill-switch is on |
+| `MAX_LISTING_AGE_SECONDS` | optional | `600`                                                         |                                                                                           |
+| `STRIPE_SECRET_KEY`       | optional |                                                               | Wire at payment launch                                                                    |
+| `STRIPE_WEBHOOK_SECRET`   | optional |                                                               | Wire at payment launch                                                                    |
 
 ### 7.2 Worker (`worker.env` on the VPS)
 

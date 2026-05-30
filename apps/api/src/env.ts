@@ -76,7 +76,10 @@ const schema = z.object({
   // Soft cap on what we'll actually fulfil. Items priced above this are still
   // shown on the storefront but can't be purchased yet — we display a
   // "restocking" message. Raise (in cents) as bot balance + ops confidence grows.
-  MAX_BUY_PRICE_MINOR: z.coerce.number().int().positive().default(500),
+  // NOTE: while the worker refund kill-switch (MOCK_PAYMENTS=true) is active, this
+  // cap also bounds the per-order loss on a failed delivery — keep it modest until
+  // MOCK_PAYMENTS=false, then it's safe to raise toward the AOV target.
+  MAX_BUY_PRICE_MINOR: z.coerce.number().int().positive().default(2000),
   // PSP minimum. Whop refuses plan creation under $1.00 (returns 400 "plan
   // must be at least $1.00") — items below this floor would 503 the buyer
   // at checkout with no recourse. Mark them restocking on the storefront
