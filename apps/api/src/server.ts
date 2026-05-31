@@ -16,6 +16,7 @@ import { registerDevRoutes } from './routes/dev.js';
 import { registerMerchantSessionRoutes } from './routes/merchant-sessions.js';
 import { registerPayRoutes } from './routes/pay.js';
 import { registerPayEventRoutes } from './routes/pay-events.js';
+import { registerAdminRoutes } from './routes/admin.js';
 
 /**
  * Pino log redaction: never let secrets / signing material reach logs. Applies
@@ -188,6 +189,7 @@ export const buildServer = (): FastifyInstance => {
     registerMerchantSessionRoutes(instance);
     registerPayRoutes(instance);
     registerPayEventRoutes(instance);
+    registerAdminRoutes(instance);
   });
 
   return server;
