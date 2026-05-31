@@ -65,7 +65,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
   return (
     <CheckoutShell
       showBrand={false}
-      subtitle="Complete the payment below to credit your account balance."
+      subtitle={null}
     >
       {isPaid ? (
         <div className="space-y-5">

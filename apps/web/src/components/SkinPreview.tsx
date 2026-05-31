@@ -31,7 +31,7 @@ export const SkinPreview = ({ name, iconUrl, priceLabel }: Props) => {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors hover:bg-zinc-50"
       >
-        <span className="text-sm font-medium text-zinc-700">Your item</span>
+        <span className="text-sm font-medium text-zinc-700">Item</span>
         <span className="flex items-center gap-1.5 text-xs text-zinc-400">
           {open ? 'Hide' : 'Show'}
           <svg

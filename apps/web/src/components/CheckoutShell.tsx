@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 interface Props {
   /** Sub-headline beneath the big "Checkout" title — context for the buyer. */
-  subtitle: ReactNode;
+  subtitle?: ReactNode;
   /** Main column (iframe + any inline error UI). */
   children: ReactNode;
   /**
@@ -48,7 +48,7 @@ export const CheckoutShell = ({ subtitle, children, showBrand = true }: Props) =
         >
           Checkout
         </h1>
-        <p className="mt-2 text-sm text-zinc-500 sm:text-base">{subtitle}</p>
+        {subtitle ? <p className="mt-2 text-sm text-zinc-500 sm:text-base">{subtitle}</p> : null}
 
         <div className="mt-8">{children}</div>
 
