@@ -242,6 +242,7 @@ model Order {
   payments           Payment[]
   trades             Trade[]
   sourceTransactions SourceTransaction[]
+  payPageEvents      PayPageEvent[]
 
   @@index([merchantId, status])
   @@index([buyerId, createdAt(sort: Desc)])
@@ -438,4 +439,22 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([actorType, actorId, createdAt(sort: Desc)])
+}
+
+model PayPageEvent {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id])
+  eventType    String   // page_opened | user_interacted | payment_complete | tab_closed | error_shown
+  occurredAt   DateTime @default(now())
+  ip           String?
+  deviceType   String?  // mobile | tablet | desktop
+  userAgent    String?
+  timeOnPageMs Int?
+  errorCode    String?
+  metadata     Json?
+
+  @@index([orderId])
+  @@index([eventType, occurredAt(sort: Desc)])
+  @@index([occurredAt(sort: Desc)])
 }

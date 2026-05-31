@@ -15,18 +15,21 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { WhopCheckoutEmbed } from '@whop/checkout/react';
+import { firePayEvent } from './PayAnalytics';
 
 const EMAIL_KEY = 'checkout_email';
 
 interface Props {
+  orderId: string;
   planId: string;
   returnUrl: string;
 }
 
-export const PayEmbed = ({ planId, returnUrl }: Props) => {
+export const PayEmbed = ({ orderId, planId, returnUrl }: Props) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controls = useRef<any>(null);
   const [savedEmail, setSavedEmail] = useState<string | undefined>(undefined);
+  const interacted = useRef(false);
 
   useEffect(() => {
     try {
@@ -37,8 +40,18 @@ export const PayEmbed = ({ planId, returnUrl }: Props) => {
     }
   }, []);
 
+  const handleFormInteraction = () => {
+    if (!interacted.current) {
+      interacted.current = true;
+      firePayEvent(orderId, 'user_interacted');
+    }
+  };
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+    <div
+      className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
+      onPointerDown={handleFormInteraction}
+    >
       <WhopCheckoutEmbed
         ref={controls}
         planId={planId}
@@ -49,6 +62,7 @@ export const PayEmbed = ({ planId, returnUrl }: Props) => {
         theme="light"
         styles={{ container: { paddingX: 16, paddingY: 24 } }}
         onComplete={() => {
+          firePayEvent(orderId, 'payment_complete');
           // Try to save whatever email the buyer actually used before redirecting.
           const maybePromise = controls.current?.getEmail?.() as Promise<string> | undefined;
           if (maybePromise && typeof maybePromise.then === 'function') {

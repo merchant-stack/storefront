@@ -398,3 +398,37 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 
 ALTER TYPE "PaymentProvider" ADD VALUE IF NOT EXISTS 'WHOP';
+
+-- ============================================================================
+-- Migration 20260531000000_pay_page_events
+-- Idempotent — safe to re-run against an already-initialised DB.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS "PayPageEvent" (
+  "id"           TEXT        NOT NULL,
+  "orderId"      TEXT        NOT NULL,
+  "eventType"    TEXT        NOT NULL,
+  "occurredAt"   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "ip"           TEXT,
+  "deviceType"   TEXT,
+  "userAgent"    TEXT,
+  "timeOnPageMs" INTEGER,
+  "errorCode"    TEXT,
+  "metadata"     JSONB,
+  CONSTRAINT "PayPageEvent_pkey" PRIMARY KEY ("id")
+);
+
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'PayPageEvent_orderId_fkey'
+  ) THEN
+    ALTER TABLE "PayPageEvent"
+      ADD CONSTRAINT "PayPageEvent_orderId_fkey"
+      FOREIGN KEY ("orderId") REFERENCES "Order"("id")
+      ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS "PayPageEvent_orderId_idx"              ON "PayPageEvent"("orderId");
+CREATE INDEX IF NOT EXISTS "PayPageEvent_eventType_occurredAt_idx" ON "PayPageEvent"("eventType", "occurredAt" DESC);
+CREATE INDEX IF NOT EXISTS "PayPageEvent_occurredAt_idx"           ON "PayPageEvent"("occurredAt" DESC);

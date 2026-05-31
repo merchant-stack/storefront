@@ -14,6 +14,7 @@ import { API_URL } from '@/lib/api';
 import { formatPrice } from '@/lib/format';
 import { CheckoutShell } from '@/components/CheckoutShell';
 import { PayEmbed } from '@/components/PayEmbed';
+import { PayAnalytics } from '@/components/PayAnalytics';
 import { SkinPreview } from '@/components/SkinPreview';
 
 // Override the global title template so the browser tab doesn't read
@@ -67,6 +68,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
       showBrand={false}
       subtitle={null}
     >
+      <PayAnalytics orderId={id} />
       {isPaid ? (
         <div className="space-y-5">
           {summary}
@@ -98,7 +100,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
               priceLabel={amountLabel}
             />
           ) : null}
-          <PayEmbed planId={session.plan_id} returnUrl={session.return_url ?? '/'} />
+          <PayEmbed orderId={id} planId={session.plan_id} returnUrl={session.return_url ?? '/'} />
         </div>
       )}
     </CheckoutShell>
