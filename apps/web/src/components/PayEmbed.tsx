@@ -8,11 +8,12 @@
 // redirect — they wait for our HMAC-signed webhook before crediting the
 // user's balance. The redirect is UX-only.
 //
-// Email is collected in our own field above the Whop iframe (Whop's built-in
-// email input is hidden via hideEmail). We persist it to localStorage so
-// returning buyers don't have to retype it.
+// Email persistence: on mount we read localStorage and pass it to Whop via
+// `prefill` so the field is pre-filled for returning buyers. On completion
+// we read it back via the embed controls ref and save it again (in case the
+// buyer edited it before paying).
 
-import { useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { WhopCheckoutEmbed } from '@whop/checkout/react';
 
 const EMAIL_KEY = 'checkout_email';
@@ -23,54 +24,47 @@ interface Props {
 }
 
 export const PayEmbed = ({ planId, returnUrl }: Props) => {
-  const [email, setEmail] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controls = useRef<any>(null);
+  const [savedEmail, setSavedEmail] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(EMAIL_KEY);
-      if (saved) setEmail(saved);
+      const v = localStorage.getItem(EMAIL_KEY);
+      if (v) setSavedEmail(v);
     } catch {
       // localStorage unavailable (private browsing) — skip silently
     }
   }, []);
 
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setEmail(v);
-    try { localStorage.setItem(EMAIL_KEY, v); } catch { /* ignore */ }
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <label className="block px-5 pt-4 pb-3">
-          <span className="mb-1.5 block text-sm font-medium text-zinc-700">Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={handleEmailChange}
-            placeholder="you@example.com"
-            autoComplete="email"
-            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-400 focus:bg-white focus:ring-2 focus:ring-zinc-200"
-          />
-        </label>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-        <WhopCheckoutEmbed
-          planId={planId}
-          prefill={email ? { email } : undefined}
-          hideEmail
-          // Light theme deliberately: matches the surrounding light page chrome
-          // (see CheckoutShell.tsx) and dodges Whop's dark-theme dropdown bug
-          // where the country dropdown popup renders gray-on-white inside their iframe.
-          theme="light"
-          styles={{ container: { paddingX: 16, paddingY: 24 } }}
-          onComplete={() => {
+    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      <WhopCheckoutEmbed
+        ref={controls}
+        planId={planId}
+        prefill={savedEmail ? { email: savedEmail } : undefined}
+        // Light theme deliberately: matches the surrounding light page chrome
+        // (see CheckoutShell.tsx) and dodges Whop's dark-theme dropdown bug
+        // where the country dropdown popup renders gray-on-white inside their iframe.
+        theme="light"
+        styles={{ container: { paddingX: 16, paddingY: 24 } }}
+        onComplete={() => {
+          // Try to save whatever email the buyer actually used before redirecting.
+          const maybePromise = controls.current?.getEmail?.() as Promise<string> | undefined;
+          if (maybePromise && typeof maybePromise.then === 'function') {
+            maybePromise
+              .then((email: string) => {
+                if (email) {
+                  try { localStorage.setItem(EMAIL_KEY, email); } catch { /* ignore */ }
+                }
+                window.location.href = returnUrl;
+              })
+              .catch(() => { window.location.href = returnUrl; });
+          } else {
             window.location.href = returnUrl;
-          }}
-        />
-      </div>
+          }
+        }}
+      />
     </div>
   );
 };
