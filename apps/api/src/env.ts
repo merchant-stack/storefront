@@ -119,6 +119,17 @@ const schema = z.object({
   // EMPTY string = allowlist disabled (HMAC alone protects). Used for the
   // initial integration window before the merchant's egress IPs are known.
   MERCHANT_COBALT_ALLOWED_IPS: z.string().default(''),
+  // --- cobalt.skin pull-flow for /pay/<id> (the "cmvd"-prefixed invoices) ---
+  // A cobalt-hosted invoice has no Order on our side. When /pay receives an id
+  // starting with "cmvd", the api fetches its display data (Whop plan id, amount,
+  // item name) server-side from cobalt's callback endpoint, caches it in Redis,
+  // and renders the checkout form. The token is a shared secret used server-side
+  // ONLY — it never reaches the browser. Both optional so api boot succeeds
+  // without them; the cobalt branch returns 404 until both are set.
+  // URL is the base WITHOUT the trailing "/?token=...&invoiceID=..." — e.g.
+  //   https://cobaltlab.tech/api/paymentCallback/rustSupply_jniubd32
+  COBALT_PAY_CALLBACK_URL: optionalNonEmpty,
+  COBALT_PAY_CALLBACK_TOKEN: optionalNonEmpty,
 });
 
 const parsed = schema.safeParse(process.env);
