@@ -50,6 +50,13 @@ const schema = z.object({
   WHOP_WEBHOOK_SECRET: optionalNonEmpty,
   WHOP_COMPANY_ID: optionalNonEmpty,
   WHOP_PRODUCT_ID: optionalNonEmpty,
+  // Optional plan-creation proxy (cobalt's invoice.php). When BOTH are set,
+  // createSession routes the plan POST through this URL with a `token` header
+  // instead of calling api.whop.com directly with WHOP_API_KEY — the proxy
+  // holds the Whop key and forwards verbatim. Leave unset to call Whop direct.
+  // URL is the full invoice.php endpoint; token is a shared secret (server-only).
+  WHOP_PLAN_PROXY_URL: optionalNonEmpty,
+  WHOP_PLAN_PROXY_TOKEN: optionalNonEmpty,
   // Bearer token required by Prometheus to scrape /metrics. When unset in
   // production /metrics responds 404 (so attackers can't even tell it exists);
   // a scraper provides `Authorization: Bearer <token>`. Generate with

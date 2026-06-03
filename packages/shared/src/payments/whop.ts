@@ -40,6 +40,14 @@ export interface WhopProviderConfig {
   companyId: string | undefined;
   productId: string | undefined;
   baseUrl?: string;
+  // Optional plan-creation proxy (cobalt's invoice.php). When BOTH url + token
+  // are set, createSession POSTs the identical plan body to this URL with a
+  // `token` header instead of calling api.whop.com/api/v1/plans directly with
+  // the Whop Bearer key. The proxy holds the real Whop API key, forwards the
+  // body verbatim to /api/v1/plans, and returns Whop's response unchanged — so
+  // only the URL + auth header differ. Unset → direct Whop call (unchanged).
+  planProxyUrl?: string;
+  planProxyToken?: string;
 }
 
 interface WhopPlanResponse {
@@ -82,7 +90,12 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
     },
 
     async createSession(input: CreateSessionInput): Promise<CreateSessionResult | null> {
-      if (!config.apiKey || !config.companyId || !config.productId) return null;
+      // Route plan creation through cobalt's proxy when configured; otherwise
+      // call Whop directly. The proxy needs no Whop key on our side (it holds
+      // its own), but companyId/productId still ride in the body either way.
+      const useProxy = Boolean(config.planProxyUrl && config.planProxyToken);
+      if (!config.companyId || !config.productId) return null;
+      if (!useProxy && !config.apiKey) return null;
 
       // Whop accepts the price in major units (e.g. 4.99). We store cents; the
       // orchestrator hands us amountMinor. Use 2 decimals to keep float drift
@@ -106,10 +119,15 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
         visibility: 'hidden' as const,
       };
 
-      const res = await fetch(`${baseUrl}/api/v1/plans`, {
+      const planUrl = useProxy ? config.planProxyUrl! : `${baseUrl}/api/v1/plans`;
+      const authHeaders: Record<string, string> = useProxy
+        ? { token: config.planProxyToken! }
+        : { Authorization: `Bearer ${config.apiKey}` };
+
+      const res = await fetch(planUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.apiKey}`,
+          ...authHeaders,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
@@ -127,7 +145,7 @@ export function createWhopProvider(config: WhopProviderConfig): PaymentProvider 
           JSON.stringify({
             level: 'error',
             provider: 'whop',
-            endpoint: '/api/v1/plans',
+            endpoint: useProxy ? 'plan-proxy' : '/api/v1/plans',
             status: res.status,
             // Cap body at 500 chars — Whop errors are usually short JSON, this
             // prevents accidentally flooding logs if they ever return HTML.

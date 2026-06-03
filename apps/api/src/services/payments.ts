@@ -42,6 +42,8 @@ export const getPaymentRegistry = (): PaymentRegistry => {
         webhookSecret: env.WHOP_WEBHOOK_SECRET,
         companyId: env.WHOP_COMPANY_ID,
         productId: env.WHOP_PRODUCT_ID,
+        planProxyUrl: env.WHOP_PLAN_PROXY_URL,
+        planProxyToken: env.WHOP_PLAN_PROXY_TOKEN,
       },
     });
   }

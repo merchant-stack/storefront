@@ -223,4 +223,45 @@ describe('createSession', () => {
     });
     expect(result).toBeNull();
   });
+
+  it('routes through the plan proxy (url + token header) when configured', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response(
+        JSON.stringify({ id: 'plan_via_proxy', purchase_url: 'https://whop.com/rustsupply/checkout/plan_via_proxy' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const provider = createWhopProvider({
+      ...CFG,
+      planProxyUrl: 'https://whoop.secretbranch.app/api/paymentCallback/rustSupply_jniubd32/invoice.php',
+      planProxyToken: 'proxy_token_xyz',
+    });
+    const result = await provider.createSession({
+      orderId: 'ord_proxy',
+      amountMinor: 1500,
+      currency: 'USD',
+      description: 'Whiteout Kilt',
+      successUrl: '',
+      cancelUrl: '',
+    });
+
+    expect(result).toEqual({
+      providerSessionId: 'plan_via_proxy',
+      redirectUrl: 'https://whop.com/rustsupply/checkout/plan_via_proxy',
+    });
+
+    const mockFetch = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const [url, opts] = mockFetch.mock.calls[0];
+    // Hits the proxy, authenticates with the `token` header (no Whop Bearer),
+    // and the forwarded body is identical to the direct-Whop case.
+    expect(url).toBe('https://whoop.secretbranch.app/api/paymentCallback/rustSupply_jniubd32/invoice.php');
+    const headers = (opts as { headers: Record<string, string> }).headers;
+    expect(headers.token).toBe('proxy_token_xyz');
+    expect(headers.Authorization).toBeUndefined();
+    const sentBody = JSON.parse((opts as { body: string }).body);
+    expect(sentBody.initial_price).toBe(15);
+    expect(sentBody.company_id).toBe('biz_test');
+    expect(sentBody.metadata).toEqual({ orderId: 'ord_proxy' });
+  });
 });
