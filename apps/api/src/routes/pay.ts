@@ -13,6 +13,7 @@
 
 import type { FastifyInstance, FastifyBaseLogger } from 'fastify';
 import { prisma } from '@rustskinpay/db';
+import { resolveSteamMarketIcon } from '@rustskinpay/shared/steam-icon';
 import { env } from '../env.js';
 import { getRedis } from '../services/redis.js';
 
@@ -86,6 +87,8 @@ function mapCobaltPayload(id: string, payload: unknown): PayPageSession | null {
     return_url: typeof data.return_url === 'string' ? data.return_url : null,
     cancel_url: typeof data.cancel_url === 'string' ? data.cancel_url : null,
     paid_at: null,
+    // icon_url starts null — cobalt sends only the name; fetchCobaltPaySession
+    // resolves the real Steam icon from it before caching.
     cover_skin: item ? { name: item, icon_url: null } : null,
   };
 }
@@ -155,7 +158,20 @@ async function fetchCobaltPaySession(
     return null;
   }
 
-  // 4. Cache so repeat loads don't hammer cobalt.
+  // 4. Best-effort: resolve a real Steam icon from the item name so the /pay
+  //    page shows the actual skin image instead of the generated placeholder.
+  //    cobalt only sends the name (no image URL), so we look it up ourselves.
+  //    Done ONCE here before caching (the resolved icon rides in the Redis
+  //    entry for 30m), tight timeout, fully non-fatal — on any miss the page
+  //    keeps the placeholder.
+  if (session.cover_skin && !session.cover_skin.icon_url) {
+    const icon = await resolveSteamMarketIcon(session.cover_skin.name, {
+      timeoutMs: 3000,
+    }).catch(() => null);
+    if (icon) session.cover_skin = { ...session.cover_skin, icon_url: icon };
+  }
+
+  // 5. Cache so repeat loads don't hammer cobalt (or Steam).
   await redis
     .set(cacheKey, JSON.stringify(session), 'EX', COBALT_CACHE_TTL_SECONDS)
     .catch(() => undefined);
