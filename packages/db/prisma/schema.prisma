@@ -242,7 +242,6 @@ model Order {
   payments           Payment[]
   trades             Trade[]
   sourceTransactions SourceTransaction[]
-  payPageEvents      PayPageEvent[]
 
   @@index([merchantId, status])
   @@index([buyerId, createdAt(sort: Desc)])
@@ -443,8 +442,10 @@ model AuditLog {
 
 model PayPageEvent {
   id           String   @id @default(cuid())
+  // The /pay session id. Usually an Order.id, but for cobalt-hosted invoices
+  // it's a "cmvd…" id that has NO Order on our side — so this is a plain string
+  // with NO foreign key, letting us record analytics for cobalt sessions too.
   orderId      String
-  order        Order    @relation(fields: [orderId], references: [id])
   eventType    String   // page_opened | user_interacted | payment_complete | tab_closed | error_shown
   occurredAt   DateTime @default(now())
   ip           String?

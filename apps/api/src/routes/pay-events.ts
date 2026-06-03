@@ -13,6 +13,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '@rustskinpay/db';
+import { getRedis } from '../services/redis.js';
+
+// cobalt-hosted invoices use a "cmvd…" session id and have NO Order on our
+// side — they're validated against the cobalt Redis cache instead.
+const COBALT_ID_PREFIX = 'cmvd';
 
 const ALLOWED_EVENTS = [
   'page_opened',
@@ -58,13 +63,23 @@ export const registerPayEventRoutes = (server: FastifyInstance): void => {
       }
       const { orderId, eventType, timeOnPageMs, errorCode, metadata } = parsed.data;
 
-      // Validate orderId exists — prevents spurious writes for fabricated IDs.
-      const exists = await prisma.order.findUnique({
-        where: { id: orderId },
-        select: { id: true },
-      });
-      if (!exists) {
-        // Return 200 to avoid leaking whether an orderId is valid.
+      // Validate the session id — prevents spurious writes for fabricated IDs.
+      // Our own orders must be a real Order; cobalt-hosted invoices (cmvd…) have
+      // no Order, so we confirm the invoice is in the cobalt Redis cache (set
+      // when /pay/:id resolved it). Either way an unknown id is silently dropped.
+      let known: boolean;
+      if (orderId.startsWith(COBALT_ID_PREFIX)) {
+        const cached = await getRedis().get(`cobalt:pay:${orderId}`).catch(() => null);
+        known = Boolean(cached);
+      } else {
+        const exists = await prisma.order.findUnique({
+          where: { id: orderId },
+          select: { id: true },
+        });
+        known = Boolean(exists);
+      }
+      if (!known) {
+        // Return 200 to avoid leaking whether an id is valid.
         return reply.code(200).send({ ok: true });
       }
 

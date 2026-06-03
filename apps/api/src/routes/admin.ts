@@ -74,12 +74,25 @@ export const registerAdminRoutes = (server: FastifyInstance): void => {
         currency: true,
         status: true,
         createdAt: true,
-        payPageEvents: {
-          select: { eventType: true, deviceType: true, occurredAt: true },
-          orderBy: { occurredAt: 'asc' },
-        },
       },
     });
+    // PayPageEvent.orderId no longer has an FK relation to Order (so cobalt
+    // cmvd sessions, which have no Order, can be recorded for the funnel +
+    // devices above). Fetch this batch's events separately and group by id.
+    const recentOrderIds = recentOrders.map((o) => o.id);
+    const recentEvents = recentOrderIds.length
+      ? await prisma.payPageEvent.findMany({
+          where: { orderId: { in: recentOrderIds } },
+          select: { orderId: true, eventType: true, deviceType: true, occurredAt: true },
+          orderBy: { occurredAt: 'asc' },
+        })
+      : [];
+    const eventsByOrder = new Map<string, { eventType: string; deviceType: string | null }[]>();
+    for (const e of recentEvents) {
+      const arr = eventsByOrder.get(e.orderId) ?? [];
+      arr.push({ eventType: e.eventType, deviceType: e.deviceType });
+      eventsByOrder.set(e.orderId, arr);
+    }
 
     return reply.send({
       period_days: days,
@@ -92,15 +105,18 @@ export const registerAdminRoutes = (server: FastifyInstance): void => {
       devices,
       avg_time_on_page_ms: avgTimeMs,
       tab_closed_count: tabClosedRaw.length,
-      recent_sessions: recentOrders.map((o) => ({
-        order_id: o.id,
-        amount_minor: o.totalAmountMinor,
-        currency: o.currency,
-        status: o.status,
-        created_at: o.createdAt.toISOString(),
-        events: o.payPageEvents.map((e) => e.eventType),
-        device: o.payPageEvents[0]?.deviceType ?? null,
-      })),
+      recent_sessions: recentOrders.map((o) => {
+        const evs = eventsByOrder.get(o.id) ?? [];
+        return {
+          order_id: o.id,
+          amount_minor: o.totalAmountMinor,
+          currency: o.currency,
+          status: o.status,
+          created_at: o.createdAt.toISOString(),
+          events: evs.map((e) => e.eventType),
+          device: evs[0]?.deviceType ?? null,
+        };
+      }),
     });
   });
 };
