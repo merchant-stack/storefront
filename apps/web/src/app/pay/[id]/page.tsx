@@ -100,7 +100,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
               priceLabel={amountLabel}
             />
           ) : null}
-          <PayEmbed orderId={id} planId={session.plan_id} returnUrl={session.return_url ?? '/'} />
+          <PayEmbed orderId={id} planId={session.plan_id} />
         </div>
       )}
     </CheckoutShell>

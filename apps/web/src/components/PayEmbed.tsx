@@ -3,14 +3,11 @@
 // Embedded Whop checkout for the merchant deposit gateway (/pay/[id]).
 //
 // On onComplete we swap the embed for an in-page "Payment successful" screen
-// (English) instead of bouncing the buyer straight away — they see a clear
-// confirmation, then continue back to the merchant via returnUrl. When a real
-// returnUrl is present we also auto-redirect after a short delay; when it's the
-// bare "/" fallback (merchant sent no return_url) we DON'T redirect, so a
-// cobalt buyer is never dumped onto our own storefront (white-label).
+// (English) and STAY there — no redirect anywhere. The buyer reads the
+// confirmation and closes the window themselves.
 // Critically: the merchant's server-side credit logic does NOT trust this
 // completion — they wait for our HMAC-signed webhook before crediting the
-// user's balance. This screen + redirect is UX-only.
+// user's balance. This screen is UX-only.
 //
 // Email persistence: on mount we read localStorage and pass it to Whop via
 // `prefill` so the field is pre-filled for returning buyers. On completion
@@ -22,26 +19,18 @@ import { WhopCheckoutEmbed } from '@whop/checkout/react';
 import { firePayEvent } from './PayAnalytics';
 
 const EMAIL_KEY = 'checkout_email';
-// Seconds to show the success screen before auto-returning to the merchant.
-const AUTO_RETURN_SECONDS = 5;
 
 interface Props {
   orderId: string;
   planId: string;
-  returnUrl: string;
 }
 
-export const PayEmbed = ({ orderId, planId, returnUrl }: Props) => {
+export const PayEmbed = ({ orderId, planId }: Props) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controls = useRef<any>(null);
   const [savedEmail, setSavedEmail] = useState<string | undefined>(undefined);
   const [paid, setPaid] = useState(false);
   const interacted = useRef(false);
-
-  // A real merchant return target (not the bare "/" fallback) is one we should
-  // send the buyer back to; "/" means cobalt gave no return_url and we must
-  // NOT redirect a white-label buyer onto our own storefront.
-  const hasReturn = Boolean(returnUrl && returnUrl !== '/');
 
   useEffect(() => {
     try {
@@ -51,16 +40,6 @@ export const PayEmbed = ({ orderId, planId, returnUrl }: Props) => {
       // localStorage unavailable (private browsing) — skip silently
     }
   }, []);
-
-  // After the success screen shows, auto-return to the merchant — but only
-  // when there's a real returnUrl. Manual "Continue" is always available too.
-  useEffect(() => {
-    if (!paid || !hasReturn) return;
-    const t = setTimeout(() => {
-      window.location.href = returnUrl;
-    }, AUTO_RETURN_SECONDS * 1000);
-    return () => clearTimeout(t);
-  }, [paid, hasReturn, returnUrl]);
 
   const handleFormInteraction = () => {
     if (!interacted.current) {
@@ -83,14 +62,6 @@ export const PayEmbed = ({ orderId, planId, returnUrl }: Props) => {
             Your payment has been completed. You can safely close this window.
           </p>
         </div>
-        {hasReturn ? (
-          <a
-            href={returnUrl}
-            className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-zinc-800"
-          >
-            Continue →
-          </a>
-        ) : null}
       </div>
     );
   }
