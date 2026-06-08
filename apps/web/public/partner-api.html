@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>RustSupply Partner API — Integration Guide</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --panel: #15151a;
+    --panel2: #1c1c23;
+    --text: #e7e7ea;
+    --muted: #9a9aa5;
+    --accent: #ff5a1f;
+    --border: #2a2a33;
+    --code: #0a0a0d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 96px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 32px; }
+  .logo { font-weight: 900; font-size: 26px; letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  h1 { font-size: 30px; margin: 18px 0 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 22px; margin: 40px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+  h3 { font-size: 17px; margin: 26px 0 8px; color: var(--text); }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+  code {
+    background: var(--code);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    color: #ffd9c7;
+  }
+  pre {
+    background: var(--code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; color: #d7d7de; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 10px; border: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--panel2); color: var(--text); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin: 18px 0; }
+  .tag { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 2px 12px; font-size: 12.5px; margin-bottom: 8px; }
+  ul { padding-left: 22px; }
+  .footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">Rust<span>Supply</span></div>
+  <div class="tag">Partner API</div>
+  <h1>Partner Integration Guide</h1>
+  <p class="muted">How to integrate the RustSupply payment gateway into your platform. Your server creates a payment session, your user pays on a hosted form, and we notify your server with a signed webhook when the payment completes.</p>
+</header>
+
+<p>This document is the integration spec for a partner's server-side developer. You call the RustSupply gateway to accept card and regional payment-method deposits from your users, then receive an HMAC-signed webhook from us when a payment completes. Your buyers never leave a branded, hosted payment flow.</p>
+
+<h2>Architecture in 30 seconds</h2>
+<pre><code>   Your platform (server)
+        │
+   (1) POST /api/merchant/sessions   (HMAC-signed)
+        ▼
+   RustSupply API
+        │
+   (2) returns checkout_url
+        ▼
+   You redirect the user's browser to the hosted payment form
+        │
+   (3) user pays (card / regional method)
+        ▼
+   RustSupply confirms PAID
+        │
+   (4) RustSupply POSTs an HMAC-signed webhook to YOUR endpoint
+        ▼
+   Your webhook handler verifies the signature and credits the user
+        │
+   (5) the user's browser is redirected back to your return_url
+       (UX only — credit the user from the webhook in step 4, not the redirect)</code></pre>
+
+<h2>Credentials we provide</h2>
+<ul>
+  <li><code>MERCHANT_ID</code> — your merchant identifier, e.g. <code>m_yourbrand</code>.</li>
+  <li><code>API_SECRET</code> — 32-byte hex string. Used to HMAC-sign your requests to us.</li>
+  <li><code>WEBHOOK_SECRET</code> — 32-byte hex string. Used to HMAC-sign our outbound webhooks to you, so you can verify they came from us.</li>
+</ul>
+<p class="muted">Both secrets are server-side only. Never ship them to the browser.</p>
+
+<h3>What we need from you</h3>
+<ul>
+  <li>Your <strong>webhook URL</strong> — where we POST signed payment events (e.g. <code>https://your-domain.com/webhooks/rustsupply</code>).</li>
+  <li>Your server's <strong>egress IP(s)</strong> — the public IPs your backend calls our API from. We allowlist them so even a leaked <code>API_SECRET</code> can't be used from an arbitrary IP. A single IP, a list, or a CIDR range all work. During initial integration we can leave the allowlist open if you don't have stable IPs yet.</li>
+</ul>
+
+<h2>Step 1 — Create a payment session</h2>
+<p>When a user starts a deposit/checkout on your side, your server makes one signed POST to RustSupply, then redirects the user's browser to the returned URL.</p>
+
+<h3>Request</h3>
+<pre><code>POST https://api.rustsupply.com/api/merchant/sessions
+Headers:
+  Content-Type: application/json
+  X-Merchant-Id: m_yourbrand
+  X-Timestamp:   &lt;unix-seconds&gt;
+  X-Nonce:       &lt;16-32 hex chars, random per request&gt;
+  X-Signature:   &lt;hex of HMAC-SHA256(API_SECRET, signing_string)&gt;
+Body:
+  {
+    "merchant_order_id": "ord_&lt;your-internal-id&gt;",
+    "amount_minor": 5000,
+    "currency": "USD",
+    "return_url": "https://your-domain.com/checkout/&lt;your-id&gt;/done",
+    "cancel_url": "https://your-domain.com/checkout/&lt;your-id&gt;/cancelled",
+    "user_identifier": "&lt;your-internal-user-id&gt;",
+    "metadata": { "any": "json you want echoed back in the webhook" }
+  }</code></pre>
+<p class="muted">Required: <code>merchant_order_id</code>, <code>amount_minor</code>, <code>currency</code>, <code>return_url</code>. Optional: <code>cancel_url</code>, <code>user_identifier</code>, <code>metadata</code>.</p>
+
+<h3>Signing string</h3>
+<pre><code>METHOD + "\n" + PATH + "\n" + TIMESTAMP + "\n" + NONCE + "\n" + sha256_hex(BODY)</code></pre>
+<p>That 5-line block (newline-separated, no trailing newline) is fed into HMAC-SHA256 with your <code>API_SECRET</code>. The hex result goes into <code>X-Signature</code>.</p>
+
+<h3>Response (201 Created)</h3>
+<pre><code>{
+  "session_id": "ord_xyz...",
+  "checkout_url": "https://rustsupply.com/pay/ord_xyz...",
+  "expires_at": "2026-01-01T14:30:00Z",
+  "merchant_order_id": "ord_12345",
+  "amount_minor": 5000,
+  "currency": "USD"
+}</code></pre>
+<p>Redirect the user's browser to <code>checkout_url</code> — they'll see the hosted payment form.</p>
+
+<h3>Idempotency</h3>
+<p>If your server retries the same <code>merchant_order_id</code> you get the <strong>same</strong> session back — never a duplicate. Use a new <code>merchant_order_id</code> only for a genuinely new payment.</p>
+
+<h3>Error responses</h3>
+<table>
+  <tr><th>Status</th><th>error</th><th>Meaning</th></tr>
+  <tr><td>400</td><td><code>invalid_request</code></td><td>Body validation failed; <code>details</code> names the field.</td></tr>
+  <tr><td>400</td><td><code>return_url_not_allowed</code></td><td><code>return_url</code> host isn't on your allowlist.</td></tr>
+  <tr><td>401</td><td><code>unauthorized</code></td><td>Bad/missing signature, expired timestamp, or replayed nonce.</td></tr>
+  <tr><td>409</td><td><code>idempotency_incomplete</code></td><td>Previous attempt with this id partially failed; retry with a fresh id.</td></tr>
+  <tr><td>503</td><td><code>payment_provider_unavailable</code></td><td>Transient — retry in ~30s.</td></tr>
+</table>
+
+<h2>Step 2 — Receive the success webhook</h2>
+<p>When the user pays, we POST a signed JSON payload to your webhook URL. You <strong>must</strong> verify the signature before crediting the user.</p>
+
+<h3>Headers we send</h3>
+<pre><code>Content-Type: application/json
+X-Event-Id: evt_xxxxxxxxxxxxxxxx
+X-Timestamp: 1779700300
+X-Signature: &lt;hex HMAC-SHA256 over signing_string with WEBHOOK_SECRET&gt;
+User-Agent: RustSupply-Webhook/1.0</code></pre>
+
+<h3>Signing string (different from the API request)</h3>
+<pre><code>EVENT_ID + "." + TIMESTAMP + "." + RAW_BODY</code></pre>
+<p>Three dot-separated parts. Use the exact raw bytes of the body — don't re-parse/re-serialise before verifying.</p>
+
+<h3>Body</h3>
+<pre><code>{
+  "event": "session.paid",
+  "event_id": "evt_xxxxxxxxxxxxxxxx",
+  "session_id": "ord_xyz...",
+  "merchant_order_id": "ord_12345",
+  "amount_minor": 5000,
+  "currency": "USD",
+  "paid_at": "2026-01-01T14:25:00Z",
+  "user_identifier": "&lt;your-internal-user-id&gt;",
+  "metadata": { "...your original metadata echoed back..." }
+}</code></pre>
+
+<h3>Idempotency &amp; retries</h3>
+<p>We retry failed deliveries on this schedule: <strong>5 min, 15 min, 1h, 6h, 24h</strong> (6 attempts total). Store every <code>event_id</code> you've seen and skip duplicates. Return any 2xx with an empty body to confirm receipt; anything else (or a timeout &gt; 10s) triggers a retry.</p>
+
+<h2>Sample code (Node.js)</h2>
+<h3>Create a session</h3>
+<pre><code>import crypto from 'node:crypto';
+
+const API_URL = 'https://api.rustsupply.com/api/merchant/sessions';
+const MERCHANT_ID = 'm_yourbrand';
+const API_SECRET = process.env.RUSTSUPPLY_API_SECRET;
+
+async function createSession({ orderId, amountUsd, userId }) {
+  const body = JSON.stringify({
+    merchant_order_id: orderId,
+    amount_minor: Math.round(amountUsd * 100),
+    currency: 'USD',
+    return_url: `https://your-domain.com/checkout/${orderId}/done`,
+    cancel_url: `https://your-domain.com/checkout/${orderId}/cancelled`,
+    user_identifier: userId,
+  });
+
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const bodyHash = crypto.createHash('sha256').update(body, 'utf8').digest('hex');
+  const stringToSign = ['POST', '/api/merchant/sessions', timestamp, nonce, bodyHash].join('\n');
+  const signature = crypto.createHmac('sha256', API_SECRET).update(stringToSign).digest('hex');
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Merchant-Id': MERCHANT_ID,
+      'X-Timestamp': timestamp,
+      'X-Nonce': nonce,
+      'X-Signature': signature,
+    },
+    body,
+  });
+  if (!res.ok) throw new Error(`session create failed: ${res.status}`);
+  return res.json(); // { session_id, checkout_url, expires_at, ... }
+}</code></pre>
+
+<h3>Webhook handler</h3>
+<pre><code>import crypto from 'node:crypto';
+import express from 'express';
+
+const WEBHOOK_SECRET = process.env.RUSTSUPPLY_WEBHOOK_SECRET;
+const seenEventIds = new Set(); // back this with Redis / DB in production
+
+const app = express();
+
+app.post('/webhooks/rustsupply', express.raw({ type: 'application/json' }), (req, res) => {
+  const eventId = req.header('X-Event-Id');
+  const timestamp = req.header('X-Timestamp');
+  const signature = req.header('X-Signature');
+  if (!eventId || !timestamp || !signature) return res.sendStatus(400);
+
+  const drift = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+  if (!Number.isFinite(drift) || drift > 5 * 60) return res.sendStatus(400);
+
+  const body = req.body.toString('utf8');
+  const stringToSign = [eventId, timestamp, body].join('.');
+  const expected = crypto.createHmac('sha256', WEBHOOK_SECRET).update(stringToSign).digest();
+  const provided = Buffer.from(signature, 'hex');
+  if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
+    return res.sendStatus(400);
+  }
+
+  if (seenEventIds.has(eventId)) return res.sendStatus(200);
+  seenEventIds.add(eventId);
+
+  const event = JSON.parse(body);
+  if (event.event === 'session.paid') {
+    creditUserBalance(event.user_identifier, event.amount_minor, event.session_id);
+  }
+  res.sendStatus(200);
+});</code></pre>
+
+<h2>Security checklist (your side)</h2>
+<ul>
+  <li><strong>Store secrets server-side only.</strong> Never expose them to the browser.</li>
+  <li><strong>Verify the webhook signature</strong> before doing anything with the payload.</li>
+  <li><strong>Check timestamp drift</strong> (±5 min) and <strong>reject duplicate <code>event_id</code>s.</strong></li>
+  <li><strong>Credit from the webhook,</strong> not the browser redirect — anyone can hit your return URL.</li>
+  <li><strong>Idempotency at credit time</strong> — wrap the credit in a unique-key DB constraint.</li>
+  <li><strong>Don't trust amounts from the browser</strong> — the webhook echoes the server-side amount you set at session creation.</li>
+</ul>
+
+<h2>Limits &amp; ops</h2>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Timestamp tolerance</td><td>±5 minutes (sync via NTP)</td></tr>
+  <tr><td>Nonce retention</td><td>10 minutes — don't reuse</td></tr>
+  <tr><td>Session-create rate limit</td><td>100 req/min per merchant (ask if you need more)</td></tr>
+  <tr><td>Session expiry</td><td>30 minutes from creation</td></tr>
+  <tr><td>Webhook retries</td><td>5 min, 15 min, 1h, 6h, 24h, then FAILED</td></tr>
+  <tr><td>Webhook timeout</td><td>10 seconds per attempt</td></tr>
+</table>
+
+<h2>Settlement speed</h2>
+<p>Supported payment methods (Card, plus regional wallets such as iDEAL, Bancontact, Mobile Pay) settle <strong>instantly</strong> — our <code>session.paid</code> webhook arrives within seconds of the buyer completing payment. There is no pending state to handle. Reversible bank transfers and direct debits (ACH, SEPA Debit, BACS) are not enabled, as they are incompatible with instant, non-refundable balance crediting.</p>
+
+<h2>Supported geographies</h2>
+<p>Payments are processed via Visa/Mastercard (global) plus regional methods. Card is the universal layer — every non-sanctioned country can pay by card; local methods are additive convenience in their home country.</p>
+<table>
+  <tr><th>Region</th><th>Coverage</th></tr>
+  <tr><td>United States, EU (all 27), UK, Canada, Australia</td><td>Card</td></tr>
+  <tr><td>Netherlands</td><td>Card + iDEAL</td></tr>
+  <tr><td>Belgium</td><td>Card + Bancontact</td></tr>
+  <tr><td>Denmark, Finland</td><td>Card + Mobile Pay</td></tr>
+  <tr><td>Most other countries where Visa/MC are accepted</td><td>Card</td></tr>
+</table>
+<p class="muted"><strong>Not supported (sanctioned):</strong> Iran, North Korea, Cuba, Syria, Sudan, Russia, Belarus, Crimea region. Payments from these are blocked at the processor level regardless of method.</p>
+
+<h2>Contact</h2>
+<p>For onboarding, credentials, secret rotation, raising rate limits, or anything else, reach our integrations team at <a href="mailto:RustSkinPay@proton.me">RustSkinPay@proton.me</a>.</p>
+
+<div class="footer">
+  RustSupply Partner API — Integration Guide · <a href="https://rustsupply.com">rustsupply.com</a>
+</div>
+
+</div>
+</body>
+</html>
