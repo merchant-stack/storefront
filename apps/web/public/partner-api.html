@@ -288,9 +288,6 @@ app.post('/webhooks/rustsupply', express.raw({ type: 'application/json' }), (req
   <tr><td>Webhook timeout</td><td>10 seconds per attempt</td></tr>
 </table>
 
-<h2>Settlement speed</h2>
-<p>Supported payment methods (Card, plus regional wallets such as iDEAL, Bancontact, Mobile Pay) settle <strong>instantly</strong> — our <code>session.paid</code> webhook arrives within seconds of the buyer completing payment. There is no pending state to handle. Reversible bank transfers and direct debits (ACH, SEPA Debit, BACS) are not enabled, as they are incompatible with instant, non-refundable balance crediting.</p>
-
 <h2>Contact</h2>
 <p>For onboarding, credentials, secret rotation, raising rate limits, or anything else, reach our integrations team at <a href="mailto:RustSkinPay@proton.me">RustSkinPay@proton.me</a>.</p>
 
