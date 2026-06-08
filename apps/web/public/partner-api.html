@@ -291,18 +291,6 @@ app.post('/webhooks/rustsupply', express.raw({ type: 'application/json' }), (req
 <h2>Settlement speed</h2>
 <p>Supported payment methods (Card, plus regional wallets such as iDEAL, Bancontact, Mobile Pay) settle <strong>instantly</strong> — our <code>session.paid</code> webhook arrives within seconds of the buyer completing payment. There is no pending state to handle. Reversible bank transfers and direct debits (ACH, SEPA Debit, BACS) are not enabled, as they are incompatible with instant, non-refundable balance crediting.</p>
 
-<h2>Supported geographies</h2>
-<p>Payments are processed via Visa/Mastercard (global) plus regional methods. Card is the universal layer — every non-sanctioned country can pay by card; local methods are additive convenience in their home country.</p>
-<table>
-  <tr><th>Region</th><th>Coverage</th></tr>
-  <tr><td>United States, EU (all 27), UK, Canada, Australia</td><td>Card</td></tr>
-  <tr><td>Netherlands</td><td>Card + iDEAL</td></tr>
-  <tr><td>Belgium</td><td>Card + Bancontact</td></tr>
-  <tr><td>Denmark, Finland</td><td>Card + Mobile Pay</td></tr>
-  <tr><td>Most other countries where Visa/MC are accepted</td><td>Card</td></tr>
-</table>
-<p class="muted"><strong>Not supported (sanctioned):</strong> Iran, North Korea, Cuba, Syria, Sudan, Russia, Belarus, Crimea region. Payments from these are blocked at the processor level regardless of method.</p>
-
 <h2>Contact</h2>
 <p>For onboarding, credentials, secret rotation, raising rate limits, or anything else, reach our integrations team at <a href="mailto:RustSkinPay@proton.me">RustSkinPay@proton.me</a>.</p>
 
